@@ -31,7 +31,7 @@ public class SpalshActivity extends AppCompatActivity {
             @Override
             public void onAnimationEnd(Animation animation) {
                 // When the animation ends, transition to RegisterActivity
-                Intent intent = new Intent(SpalshActivity.this, RegisterActivity.class);
+                Intent intent = new Intent(SpalshActivity.this, MainActivity.class);
                 startActivity(intent);
                 finish(); // Close the splash activity
             }
