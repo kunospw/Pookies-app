@@ -23,6 +23,10 @@
           android:icon="@drawable/policy"
           android:id="@+id/navPolicy"
           android:title="Policy" />
+      <item
+          android:icon="@drawable/bluetooth"
+          android:id="@+id/navBluetooth"
+          android:title="Bluetooth" />
    </group>
       <item
        android:icon="@drawable/logout"
