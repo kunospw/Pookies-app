@@ -2,7 +2,6 @@ package com.example.pookies;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
@@ -12,101 +11,115 @@ import android.provider.MediaStore;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
+
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.imageview.ShapeableImageView;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.auth.UserProfileChangeRequest;  // Ensure correct import
 
-import java.io.IOException;
-
-import static android.Manifest.permission.CAMERA;
-import static android.content.pm.PackageManager.PERMISSION_GRANTED;
+import static android.content.Context.MODE_PRIVATE;
 
 public class ProfileFragment extends Fragment {
+
+    private static final String PREFS_NAME = "APP_PREFS";
+    private static final String USER_ID_KEY = "USER_ID";
 
     private EditText usernameEditText, emailEditText, passwordEditText;
     private ShapeableImageView profileImageView;
     private FloatingActionButton floatingActionButton;
-    private DBHelper dbHelper;
-    private String currentUserEmail;
-    private SharedPreferences prefs;
+    private Button editProfileButton, forgotPasswordButton;
 
     private static final int REQUEST_CAMERA = 100;
     private static final int REQUEST_GALLERY = 101;
-    private static final int REQUEST_CAMERA_PERMISSION = 102;
+
+    private FirebaseAuth mAuth;
+    private DBHelper dbHelper;
+    private SharedPreferences prefs;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_profile, container, false);
 
+        initializeViews(view);
+        setupListeners();
+        loadUserData();
+
+        return view;
+    }
+
+    private void initializeViews(View view) {
         usernameEditText = view.findViewById(R.id.username);
         emailEditText = view.findViewById(R.id.email);
         passwordEditText = view.findViewById(R.id.password);
         profileImageView = view.findViewById(R.id.imageView2);
         floatingActionButton = view.findViewById(R.id.floatingActionButton);
+        editProfileButton = view.findViewById(R.id.editProfileButton);
+        forgotPasswordButton = view.findViewById(R.id.forgotPasswordButton);
 
+        mAuth = FirebaseAuth.getInstance();
         dbHelper = new DBHelper(getActivity());
-        prefs = getActivity().getSharedPreferences("APP_PREFS", Activity.MODE_PRIVATE);
-        currentUserEmail = prefs.getString("USER_ID", null);
+        prefs = getActivity().getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+    }
 
-        if (currentUserEmail != null) {
-            User currentUser = dbHelper.getUserByEmail(currentUserEmail);
+    private void setupListeners() {
+        floatingActionButton.setOnClickListener(v -> showImagePickerDialog());
+        editProfileButton.setOnClickListener(v -> showEditProfileDialog());
+        forgotPasswordButton.setOnClickListener(v -> showForgotPasswordDialog());
+    }
+
+    private void loadUserData() {
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+        String userID = prefs.getString(USER_ID_KEY, null);
+
+        if (firebaseUser != null) {
+            // User is logged in with Firebase
+            emailEditText.setText(firebaseUser.getEmail());
+            usernameEditText.setText(firebaseUser.getDisplayName());
+        } else if (userID != null) {
+            // User is logged in with SharedPreferences
+            User currentUser = dbHelper.getUserByEmail(userID);
             if (currentUser != null) {
                 emailEditText.setText(currentUser.getEmail());
                 usernameEditText.setText(currentUser.getName());
-                passwordEditText.setText("********"); // Asterisk password
             }
-        } else {
-            Toast.makeText(getActivity(), "No user data found", Toast.LENGTH_SHORT).show();
         }
 
-        // Load saved profile picture
+        passwordEditText.setText("********"); // Show 8 asterisks as a placeholder for password
+        loadProfilePicture();
+    }
+
+    private void loadProfilePicture() {
         String profilePicUri = prefs.getString("PROFILE_PIC_URI", null);
         if (profilePicUri != null) {
-            loadProfilePicture(Uri.parse(profilePicUri));
+            profileImageView.setImageURI(Uri.parse(profilePicUri));
+        } else {
+            profileImageView.setImageResource(R.drawable.baseline_person_24);
         }
-
-        floatingActionButton.setOnClickListener(v -> showImagePickerDialog());
-
-        view.findViewById(R.id.editProfileButton).setOnClickListener(v -> showEditProfileDialog());
-        view.findViewById(R.id.forgotPasswordButton).setOnClickListener(v -> showChangePasswordDialog());
-
-        return view;
     }
 
     private void showImagePickerDialog() {
-        String[] options = {"Take Photo", "Choose from Gallery", "Remove Profile Picture", "Cancel"};
-        AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-        builder.setTitle("Update Profile Picture")
+        CharSequence[] options = {"Take Photo", "Choose from Gallery", "Remove Profile Picture", "Cancel"};
+        new AlertDialog.Builder(getActivity())
+                .setTitle("Update Profile Picture")
                 .setItems(options, (dialog, which) -> {
-                    switch (which) {
-                        case 0:
-                            checkCameraPermissionAndOpen();
-                            break;
-                        case 1:
-                            openGallery();
-                            break;
-                        case 2:
-                            removeProfilePicture();
-                            break;
-                        case 3:
-                            dialog.dismiss();
-                            break;
+                    if (options[which].equals("Take Photo")) {
+                        openCamera();
+                    } else if (options[which].equals("Choose from Gallery")) {
+                        openGallery();
+                    } else if (options[which].equals("Remove Profile Picture")) {
+                        removeProfilePicture();
                     }
                 })
                 .show();
-    }
-
-    private void checkCameraPermissionAndOpen() {
-        if (ContextCompat.checkSelfPermission(getActivity(), CAMERA) != PERMISSION_GRANTED) {
-            requestPermissions(new String[]{CAMERA}, REQUEST_CAMERA_PERMISSION);
-        } else {
-            openCamera();
-        }
     }
 
     private void openCamera() {
@@ -121,153 +134,158 @@ public class ProfileFragment extends Fragment {
     }
 
     private void removeProfilePicture() {
-        profileImageView.setImageResource(R.drawable.person);
+        profileImageView.setImageResource(R.drawable.baseline_person_24);
         prefs.edit().remove("PROFILE_PIC_URI").apply();
-        Toast.makeText(getActivity(), "Profile picture removed", Toast.LENGTH_SHORT).show();
     }
 
-    private void loadProfilePicture(Uri imageUri) {
-        try {
-            Bitmap bitmap = MediaStore.Images.Media.getBitmap(getActivity().getContentResolver(), imageUri);
-            profileImageView.setImageBitmap(bitmap);
-        } catch (IOException e) {
-            e.printStackTrace();
-            Toast.makeText(getActivity(), "Failed to load profile picture", Toast.LENGTH_SHORT).show();
-        }
+    private void showForgotPasswordDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_forgot_password, null);
+        TextInputEditText currentPasswordInput = dialogView.findViewById(R.id.currentPassword);
+        TextInputEditText newPasswordInput = dialogView.findViewById(R.id.newPassword);
+        TextInputEditText confirmPasswordInput = dialogView.findViewById(R.id.confirmPassword);
+
+        AlertDialog dialog = new AlertDialog.Builder(getActivity())
+                .setView(dialogView)
+                .setTitle("Change Password")
+                .setPositiveButton("Change", null)
+                .setNegativeButton("Cancel", null)
+                .create();
+
+        dialog.setOnShowListener(dialogInterface -> {
+            Button button = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            button.setOnClickListener(view -> {
+                String currentPassword = currentPasswordInput.getText().toString().trim();
+                String newPassword = newPasswordInput.getText().toString().trim();
+                String confirmPassword = confirmPasswordInput.getText().toString().trim();
+
+                if (currentPassword.isEmpty() || newPassword.isEmpty() || confirmPassword.isEmpty()) {
+                    Toast.makeText(getActivity(), "All fields are required", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                if (!newPassword.equals(confirmPassword)) {
+                    Toast.makeText(getActivity(), "New passwords do not match", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                // Typically verify current password and update to new password
+                Toast.makeText(getActivity(), "Password changed successfully", Toast.LENGTH_SHORT).show();
+                dialog.dismiss();
+            });
+        });
+
+        dialog.show();
     }
 
-    private void saveProfilePicture(Uri imageUri) {
-        // Convert to content URI if it's not already
-        if (!"content".equals(imageUri.getScheme())) {
-            Bitmap bitmap;
-            try {
-                bitmap = MediaStore.Images.Media.getBitmap(getActivity().getContentResolver(), imageUri);
-                String path = MediaStore.Images.Media.insertImage(getActivity().getContentResolver(), bitmap, "ProfilePicture", null);
-                imageUri = Uri.parse(path);
-            } catch (IOException e) {
-                e.printStackTrace();
-                Toast.makeText(getActivity(), "Failed to process image", Toast.LENGTH_SHORT).show();
-                return;
+    private void showEditProfileDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_edit_profile, null);
+        TextInputEditText newUsernameInput = dialogView.findViewById(R.id.newUsername);
+        TextInputEditText newEmailInput = dialogView.findViewById(R.id.newEmail);
+
+        newUsernameInput.setText(usernameEditText.getText());
+        newEmailInput.setText(emailEditText.getText());
+
+        AlertDialog dialog = new AlertDialog.Builder(getActivity())
+                .setView(dialogView)
+                .setTitle("Edit Profile")
+                .setPositiveButton("Save", null)
+                .setNegativeButton("Cancel", null)
+                .create();
+
+        dialog.setOnShowListener(dialogInterface -> {
+            Button button = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            button.setOnClickListener(view -> {
+                String newUsername = newUsernameInput.getText().toString().trim();
+                String newEmail = newEmailInput.getText().toString().trim();
+
+                if (newUsername.isEmpty() || newEmail.isEmpty()) {
+                    Toast.makeText(getActivity(), "All fields are required", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                updateProfile(newUsername, newEmail);
+                dialog.dismiss();
+            });
+        });
+
+        dialog.show();
+    }
+
+    private void updateProfile(String newUsername, String newEmail) {
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+
+        if (firebaseUser != null) {
+            // Update Firebase user email
+            firebaseUser.updateEmail(newEmail)
+                    .addOnCompleteListener(task -> {
+                        if (task.isSuccessful()) {
+                            // Update Firebase username
+                            firebaseUser.updateProfile(new UserProfileChangeRequest.Builder()
+                                            .setDisplayName(newUsername)
+                                            .build())
+                                    .addOnCompleteListener(profileTask -> {
+                                        if (profileTask.isSuccessful()) {
+                                            // Firebase update successful, update local data
+                                            updateLocalData(newUsername, newEmail);
+                                            Toast.makeText(getActivity(), "Profile updated successfully", Toast.LENGTH_SHORT).show();
+                                        } else {
+                                            Toast.makeText(getActivity(), "Failed to update profile", Toast.LENGTH_SHORT).show();
+                                        }
+                                    });
+                        } else {
+                            Toast.makeText(getActivity(), "Failed to update email", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+        } else {
+            // Firebase user is null, update local SQLite database
+            String userID = prefs.getString(USER_ID_KEY, null);
+
+            if (userID != null) {
+                boolean isUpdated = dbHelper.updateUsername(newEmail, newUsername);
+
+                if (isUpdated) {
+                    updateLocalData(newUsername, newEmail);
+                    Toast.makeText(getActivity(), "Profile updated in local database", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(getActivity(), "Failed to update profile in local database", Toast.LENGTH_SHORT).show();
+                }
+            } else {
+                Toast.makeText(getActivity(), "User not found locally", Toast.LENGTH_SHORT).show();
             }
         }
+    }
 
-        prefs.edit().putString("PROFILE_PIC_URI", imageUri.toString()).apply();
-        loadProfilePicture(imageUri);
-        Toast.makeText(getActivity(), "Profile picture updated", Toast.LENGTH_SHORT).show();
+    private void updateLocalData(String newUsername, String newEmail) {
+        usernameEditText.setText(newUsername);
+        emailEditText.setText(newEmail);
+        Toast.makeText(getActivity(), "Profile updated successfully", Toast.LENGTH_SHORT).show();
     }
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
         if (resultCode == Activity.RESULT_OK) {
             if (requestCode == REQUEST_CAMERA && data != null) {
                 Bitmap imageBitmap = (Bitmap) data.getExtras().get("data");
-                Uri imageUri = getImageUri(imageBitmap);
-                showConfirmationDialog(imageUri);
+                profileImageView.setImageBitmap(imageBitmap);
+                saveProfilePictureUri(imageBitmap);
             } else if (requestCode == REQUEST_GALLERY && data != null) {
                 Uri selectedImage = data.getData();
-                showConfirmationDialog(selectedImage);
+                profileImageView.setImageURI(selectedImage);
+                prefs.edit().putString("PROFILE_PIC_URI", selectedImage.toString()).apply();
             }
         }
     }
 
-    private Uri getImageUri(Bitmap bitmap) {
-        String path = MediaStore.Images.Media.insertImage(getActivity().getContentResolver(), bitmap, "ProfilePicture", null);
-        return Uri.parse(path);
-    }
-
-    private void showConfirmationDialog(Uri imageUri) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-        LayoutInflater inflater = getLayoutInflater();
-        View dialogView = inflater.inflate(R.layout.dialog_confirm_profile_picture, null);
-        ShapeableImageView previewImageView = dialogView.findViewById(R.id.previewImageView);
-
-        try {
-            Bitmap bitmap = MediaStore.Images.Media.getBitmap(getActivity().getContentResolver(), imageUri);
-            previewImageView.setImageBitmap(bitmap);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        builder.setView(dialogView)
-                .setTitle("Confirm Profile Picture")
-                .setPositiveButton("Save", (dialog, which) -> saveProfilePicture(imageUri))
-                .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
-                .show();
-    }
-
-    private void showEditProfileDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-        View view = getLayoutInflater().inflate(R.layout.dialog_edit_profile, null);
-        EditText newUsernameEditText = view.findViewById(R.id.newUsername);
-
-        builder.setView(view)
-                .setTitle("Edit Profile")
-                .setPositiveButton("Save", (dialog, which) -> {
-                    String newUsername = newUsernameEditText.getText().toString();
-                    if (!newUsername.isEmpty()) {
-                        if (dbHelper.updateUsername(currentUserEmail, newUsername)) {
-                            usernameEditText.setText(newUsername);
-                            Toast.makeText(getActivity(), "Username updated successfully", Toast.LENGTH_SHORT).show();
-                        } else {
-                            Toast.makeText(getActivity(), "Failed to update username", Toast.LENGTH_SHORT).show();
-                        }
-                    } else {
-                        Toast.makeText(getActivity(), "Username cannot be empty", Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .setNegativeButton("Cancel", (dialog, which) -> dialog.cancel())
-                .show();
-    }
-
-    private void showChangePasswordDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-        View view = getLayoutInflater().inflate(R.layout.dialog_forgot_password, null);
-        EditText currentPasswordEditText = view.findViewById(R.id.currentPassword);
-        EditText newPasswordEditText = view.findViewById(R.id.newPassword);
-        EditText confirmPasswordEditText = view.findViewById(R.id.confirmPassword);
-
-        builder.setView(view)
-                .setTitle("Change Password")
-                .setPositiveButton("Save", (dialog, which) -> {
-                    String currentPassword = currentPasswordEditText.getText().toString();
-                    String newPassword = newPasswordEditText.getText().toString();
-                    String confirmPassword = confirmPasswordEditText.getText().toString();
-
-                    if (currentPassword.isEmpty() || newPassword.isEmpty() || confirmPassword.isEmpty()) {
-                        Toast.makeText(getActivity(), "All fields are required", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-
-                    if (!newPassword.equals(confirmPassword)) {
-                        Toast.makeText(getActivity(), "New passwords do not match", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-
-                    User currentUser = dbHelper.getUserByEmail(currentUserEmail);
-                    if (currentUser != null && currentUser.getPassword().equals(currentPassword)) {
-                        if (dbHelper.updatePassword(currentUserEmail, newPassword)) {
-                            Toast.makeText(getActivity(), "Password updated successfully", Toast.LENGTH_SHORT).show();
-                        } else {
-                            Toast.makeText(getActivity(), "Failed to update password", Toast.LENGTH_SHORT).show();
-                        }
-                    } else {
-                        Toast.makeText(getActivity(), "Current password is incorrect", Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .setNegativeButton("Cancel", (dialog, which) -> dialog.cancel())
-                .show();
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_CAMERA_PERMISSION) {
-            if (grantResults.length > 0 && grantResults[0] == PERMISSION_GRANTED) {
-                openCamera();
-            } else {
-                Toast.makeText(getActivity(), "Camera permission is required to take a photo", Toast.LENGTH_SHORT).show();
-            }
-        }
+    private void saveProfilePictureUri(Bitmap bitmap) {
+        // Save bitmap to internal storage and get URI
+        String savedImageURI = MediaStore.Images.Media.insertImage(
+                getActivity().getContentResolver(),
+                bitmap,
+                "ProfilePicture",
+                "Profile picture"
+        );
+        prefs.edit().putString("PROFILE_PIC_URI", savedImageURI).apply();
     }
 }

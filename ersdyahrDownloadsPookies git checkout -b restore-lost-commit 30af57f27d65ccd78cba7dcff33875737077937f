@@ -1,0 +1,411 @@
+[1mdiff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml[m
+[1mindex 6876a49..993c776 100644[m
+[1m--- a/app/src/main/AndroidManifest.xml[m
+[1m+++ b/app/src/main/AndroidManifest.xml[m
+[36m@@ -1,7 +1,12 @@[m
+ <?xml version="1.0" encoding="utf-8"?>[m
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android"[m
+     xmlns:tools="http://schemas.android.com/tools">[m
+[31m-    <uses-permission android:name="android.permission.INTERNET"/>[m
+[32m+[m
+[32m+[m[32m    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />[m
+[32m+[m[32m    <uses-permission android:name="android.permission.CAMERA" />[m
+[32m+[m
+[32m+[m[32m    <uses-feature android:name="android.hardware.camera" android:required="false" />[m
+[32m+[m
+     <application[m
+         android:allowBackup="true"[m
+         android:dataExtractionRules="@xml/data_extraction_rules"[m
+[36m@@ -20,7 +25,7 @@[m
+                 <action android:name="android.intent.action.MAIN" />[m
+                 <category android:name="android.intent.category.LAUNCHER" />[m
+             </intent-filter>[m
+[31m-            </activity>[m
+[32m+[m[32m        </activity>[m
+ [m
+         <activity[m
+             android:name=".RegisterActivity"[m
+[36m@@ -46,4 +51,5 @@[m
+             android:name="preloaded_fonts"[m
+             android:resource="@array/preloaded_fonts" />[m
+     </application>[m
+[31m-</manifest>[m
+[32m+[m
+[32m+[m[32m</manifest>[m
+\ No newline at end of file[m
+[1mdiff --git a/app/src/main/java/com/example/pookies/ChatActivity.java b/app/src/main/java/com/example/pookies/ChatActivity.java[m
+[1mindex 303075d..b4cf46b 100644[m
+[1m--- a/app/src/main/java/com/example/pookies/ChatActivity.java[m
+[1m+++ b/app/src/main/java/com/example/pookies/ChatActivity.java[m
+[36m@@ -2,153 +2,98 @@[m [mpackage com.example.pookies;[m
+ [m
+ import android.content.Intent;[m
+ import android.content.SharedPreferences;[m
+[32m+[m[32mimport android.graphics.Bitmap;[m
+[32m+[m[32mimport android.net.Uri;[m
+ import android.os.Bundle;[m
+[31m-import android.view.MenuItem;[m
+[32m+[m[32mimport android.provider.MediaStore;[m
+ import android.view.View;[m
+ import android.widget.ImageButton;[m
+ import android.widget.ImageView;[m
+ import android.widget.TextView;[m
+ import android.widget.Toast;[m
+ [m
+[31m-import androidx.annotation.NonNull;[m
+ import androidx.appcompat.app.AppCompatActivity;[m
+ import androidx.drawerlayout.widget.DrawerLayout;[m
+ import androidx.fragment.app.Fragment;[m
+ [m
+ import com.google.android.material.navigation.NavigationView;[m
+[31m-import com.google.firebase.auth.FirebaseAuth;[m
+[31m-import com.google.firebase.auth.FirebaseUser;[m
+[32m+[m
+[32m+[m[32mimport java.io.IOException;[m
+ [m
+ public class ChatActivity extends AppCompatActivity {[m
+ [m
+     DrawerLayout drawerLayout;[m
+[31m-    ImageButton buttonDrawerToogle;[m
+[32m+[m[32m    ImageButton buttonDrawerToggle;[m
+     NavigationView navigationView;[m
+     ImageView userImage;[m
+     TextView textUsername, textEmail;[m
+[32m+[m[32m    SharedPreferences prefs;[m
+ [m
+     @Override[m
+     protected void onCreate(Bundle savedInstanceState) {[m
+         super.onCreate(savedInstanceState);[m
+         setContentView(R.layout.activity_chat);[m
+ [m
+[31m-        // Initialize Firebase User[m
+[31m-        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();[m
+[31m-[m
+[31m-        if (currentUser != null) {[m
+[31m-            // Get user ID, display name, and email from Firebase[m
+[31m-            String userID = currentUser.getUid(); // Store this for session management[m
+[31m-            String displayName = currentUser.getDisplayName(); // Display this to the user[m
+[31m-            String email = currentUser.getEmail(); // Get user email[m
+[32m+[m[32m        prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);[m
+[32m+[m[32m        String userID = prefs.getString("USER_ID", null);[m
+ [m
+[31m-            // Save user ID in SharedPreferences[m
+[31m-            SharedPreferences prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);[m
+[31m-            SharedPreferences.Editor editor = prefs.edit();[m
+[31m-            editor.putString("USER_ID", userID);  // Store user ID in SharedPreferences[m
+[31m-            editor.apply();[m
+[32m+[m[32m        if (userID != null) {[m
+[32m+[m[32m            DBHelper dbHelper = new DBHelper(this);[m
+[32m+[m[32m            User currentUser = dbHelper.getUserByEmail(userID);[m
+[32m+[m[32m            if (currentUser != null) {[m
+[32m+[m[32m                String displayName = currentUser.getName();[m
+[32m+[m[32m                String email = currentUser.getEmail();[m
+ [m
+[31m-            // Toast a welcome message with the username[m
+[31m-            if (displayName != null && !displayName.isEmpty()) {[m
+                 Toast.makeText(this, "Welcome, " + displayName, Toast.LENGTH_SHORT).show();[m
+[31m-            } else {[m
+[31m-                Toast.makeText(this, "Welcome, User", Toast.LENGTH_SHORT).show();[m
+[31m-            }[m
+ [m
+[31m-            // Initialize navigation drawer and header[m
+[31m-            drawerLayout = findViewById(R.id.drawerLayout);[m
+[31m-            buttonDrawerToogle = findViewById(R.id.buttonDrawerToggle);[m
+[31m-            navigationView = findViewById(R.id.navigationView);[m
+[32m+[m[32m                drawerLayout = findViewById(R.id.drawerLayout);[m
+[32m+[m[32m                buttonDrawerToggle = findViewById(R.id.buttonDrawerToggle);[m
+[32m+[m[32m                navigationView = findViewById(R.id.navigationView);[m
+ [m
+[31m-            buttonDrawerToogle.setOnClickListener(new View.OnClickListener() {[m
+[31m-                @Override[m
+[31m-                public void onClick(View v) {[m
+[31m-                    drawerLayout.open();[m
+[31m-                }[m
+[31m-            });[m
+[32m+[m[32m                buttonDrawerToggle.setOnClickListener(v -> drawerLayout.open());[m
+ [m
+[31m-            // Initialize header view for user image and username[m
+[31m-            View headerView = navigationView.getHeaderView(0);[m
+[31m-            userImage = headerView.findViewById(R.id.userImage);[m
+[31m-            textUsername = headerView.findViewById(R.id.textUsername);[m
+[31m-            textEmail = headerView.findViewById(R.id.textEmail);  // Assuming you added a TextView for email[m
+[32m+[m[32m                View headerView = navigationView.getHeaderView(0);[m
+[32m+[m[32m                userImage = headerView.findViewById(R.id.userImage);[m
+[32m+[m[32m                textUsername = headerView.findViewById(R.id.textUsername);[m
+[32m+[m[32m                textEmail = headerView.findViewById(R.id.textEmail);[m
+ [m
+[31m-            // Set username and email in the header[m
+[31m-            if (displayName != null && !displayName.isEmpty()) {[m
+[31m-                textUsername.setText(displayName);  // Set username in TextView[m
+[31m-            } else {[m
+[31m-                textUsername.setText("User");[m
+[31m-            }[m
+[32m+[m[32m                textUsername.setText(displayName);[m
+[32m+[m[32m                textEmail.setText(email);[m
+ [m
+[31m-            textEmail.setText(email);  // Set email in TextView[m
+[31m-[m
+[31m-            // Set click listener for userImage and textUsername to open ProfileFragment[m
+[31m-            userImage.setOnClickListener(new View.OnClickListener() {[m
+[31m-                @Override[m
+[31m-                public void onClick(View view) {[m
+[31m-                    // Load ProfileFragment[m
+[31m-                    getSupportFragmentManager().beginTransaction()[m
+[31m-                            .replace(R.id.fragment_container, new ProfileFragment())[m
+[31m-                            .commit();[m
+[31m-                    // Close drawer after fragment is replaced[m
+[31m-                    drawerLayout.close();[m
+[31m-                }[m
+[31m-            });[m
+[31m-[m
+[31m-            textUsername.setOnClickListener(new View.OnClickListener() {[m
+[31m-                @Override[m
+[31m-                public void onClick(View view) {[m
+[31m-                    // Load ProfileFragment[m
+[31m-                    getSupportFragmentManager().beginTransaction()[m
+[31m-                            .replace(R.id.fragment_container, new ProfileFragment())[m
+[31m-                            .commit();[m
+[31m-                    // Close drawer after fragment is replaced[m
+[31m-                    drawerLayout.close();[m
+[31m-                }[m
+[31m-            });[m
+[32m+[m[32m                loadProfilePicture();[m
+ [m
+[32m+[m[32m                userImage.setOnClickListener(v -> loadProfileFragment());[m
+[32m+[m[32m                textUsername.setOnClickListener(v -> loadProfileFragment());[m
+[32m+[m
+[32m+[m[32m            } else {[m
+[32m+[m[32m                redirectToLogin();[m
+[32m+[m[32m            }[m
+         } else {[m
+[31m-            // No user is logged in, redirect to LoginActivity[m
+[31m-            Intent intent = new Intent(ChatActivity.this, LoginActivity.class);[m
+[31m-            startActivity(intent);[m
+[31m-            finish();[m
+[32m+[m[32m            redirectToLogin();[m
+         }[m
+ [m
+[31m-        // Set navigation item listener[m
+[31m-        navigationView.setNavigationItemSelectedListener(new NavigationView.OnNavigationItemSelectedListener() {[m
+[31m-            @Override[m
+[31m-            public boolean onNavigationItemSelected(@NonNull MenuItem item) {[m
+[31m-                Fragment selectedFragment = null;[m
+[31m-[m
+[31m-                // Replace fragments based on which menu item is clicked[m
+[31m-                int itemId = item.getItemId();[m
+[31m-                if (itemId == R.id.navChat) {[m
+[31m-                    selectedFragment = new ChatFragment();[m
+[31m-                } else if (itemId == R.id.navSettings) {[m
+[31m-                    selectedFragment = new SettingsFragment();[m
+[31m-                } else if (itemId == R.id.navFeedback) {[m
+[31m-                    selectedFragment = new FeedbackFragment();[m
+[31m-                } else if (itemId == R.id.navAbout) {[m
+[31m-                    selectedFragment = new AboutFragment();[m
+[31m-                } else if (itemId == R.id.navPolicy) {[m
+[31m-                    selectedFragment = new PolicyFragment();[m
+[31m-                } else if (itemId == R.id.navLogout) {[m
+[31m-                    logOutUser();[m
+[31m-                    return true;[m
+[31m-                }[m
+[31m-[m
+[31m-                // Replace the fragment if one was selected[m
+[31m-                if (selectedFragment != null) {[m
+[31m-                    getSupportFragmentManager().beginTransaction()[m
+[31m-                            .replace(R.id.fragment_container, selectedFragment) // 'fragment_container' is the ID of the FrameLayout in activity_content.xml[m
+[31m-                            .commit();[m
+[31m-                }[m
+[31m-[m
+[31m-                drawerLayout.close();[m
+[32m+[m[32m        navigationView.setNavigationItemSelectedListener(item -> {[m
+[32m+[m[32m            Fragment selectedFragment = null;[m
+[32m+[m[32m            int itemId = item.getItemId();[m
+[32m+[m[32m            if (itemId == R.id.navChat) {[m
+[32m+[m[32m                selectedFragment = new ChatFragment();[m
+[32m+[m[32m            } else if (itemId == R.id.navSettings) {[m
+[32m+[m[32m                selectedFragment = new SettingsFragment();[m
+[32m+[m[32m            } else if (itemId == R.id.navLogout) {[m
+[32m+[m[32m                logOutUser();[m
+                 return true;[m
+             }[m
+[32m+[m
+[32m+[m[32m            if (selectedFragment != null) {[m
+[32m+[m[32m                getSupportFragmentManager().beginTransaction()[m
+[32m+[m[32m                        .replace(R.id.fragment_container, selectedFragment)[m
+[32m+[m[32m                        .commit();[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            drawerLayout.close();[m
+[32m+[m[32m            return true;[m
+         });[m
+ [m
+[31m-        // Load default fragment (ChatFragment)[m
+         if (savedInstanceState == null) {[m
+             getSupportFragmentManager().beginTransaction()[m
+                     .replace(R.id.fragment_container, new ChatFragment())[m
+[36m@@ -156,20 +101,57 @@[m [mpublic class ChatActivity extends AppCompatActivity {[m
+         }[m
+     }[m
+ [m
+[31m-    // Method to log out the user[m
+[31m-    private void logOutUser() {[m
+[31m-        FirebaseAuth.getInstance().signOut(); // Sign out the user[m
+[32m+[m[32m    private void loadProfilePicture() {[m
+[32m+[m[32m        String profilePicUri = prefs.getString("PROFILE_PIC_URI", null);[m
+[32m+[m[32m        if (profilePicUri != null) {[m
+[32m+[m[32m            try {[m
+[32m+[m[32m                Uri uri = Uri.parse(profilePicUri);[m
+[32m+[m[32m                userImage.setImageURI(uri);[m
+[32m+[m
+[32m+[m[32m                // If setImageURI fails (returns null drawable), fall back to bitmap method[m
+[32m+[m[32m                if (userImage.getDrawable() == null) {[m
+[32m+[m[32m                    Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), uri);[m
+[32m+[m[32m                    userImage.setImageBitmap(bitmap);[m
+[32m+[m[32m                }[m
+[32m+[m[32m            } catch (IOException e) {[m
+[32m+[m[32m                e.printStackTrace();[m
+[32m+[m[32m                Toast.makeText(this, "Failed to load profile picture", Toast.LENGTH_SHORT).show();[m
+[32m+[m[32m                userImage.setImageResource(R.drawable.person);[m
+[32m+[m[32m            }[m
+[32m+[m[32m        } else {[m
+[32m+[m[32m            userImage.setImageResource(R.drawable.person);[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+ [m
+[31m-        // Clear UID from SharedPreferences[m
+[31m-        getSharedPreferences("APP_PREFS", MODE_PRIVATE).edit().remove("USER_ID").apply();[m
+[32m+[m[32m    private void loadProfileFragment() {[m
+[32m+[m[32m        getSupportFragmentManager().beginTransaction()[m
+[32m+[m[32m                .replace(R.id.fragment_container, new ProfileFragment())[m
+[32m+[m[32m                .commit();[m
+[32m+[m[32m        drawerLayout.close();[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private void redirectToLogin() {[m
+[32m+[m[32m        Intent intent = new Intent(ChatActivity.this, LoginActivity.class);[m
+[32m+[m[32m        startActivity(intent);[m
+[32m+[m[32m        finish();[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private void logOutUser() {[m
+[32m+[m[32m        SharedPreferences prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);[m
+[32m+[m[32m        prefs.edit().remove("USER_ID").apply();[m
+ [m
+[31m-        // Show a toast message to confirm logout[m
+         Toast.makeText(ChatActivity.this, "You have been logged out", Toast.LENGTH_SHORT).show();[m
+ [m
+         // Redirect to LoginActivity[m
+         Intent intent = new Intent(ChatActivity.this, LoginActivity.class);[m
+[31m-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK); // Clear activity stack[m
+[32m+[m[32m        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);[m
+         startActivity(intent);[m
+[31m-        finish(); // Close ChatActivity[m
+[32m+[m[32m        finish();[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    @Override[m
+[32m+[m[32m    protected void onResume() {[m
+[32m+[m[32m        super.onResume();[m
+[32m+[m[32m        loadProfilePicture();[m
+     }[m
+ }[m
+\ No newline at end of file[m
+[1mdiff --git a/app/src/main/java/com/example/pookies/ChatFragment.java b/app/src/main/java/com/example/pookies/ChatFragment.java[m
+[1mindex 64f3a71..4a73f1d 100644[m
+[1m--- a/app/src/main/java/com/example/pookies/ChatFragment.java[m
+[1m+++ b/app/src/main/java/com/example/pookies/ChatFragment.java[m
+[36m@@ -1,39 +1,12 @@[m
+ package com.example.pookies;[m
+ [m
+[31m-import android.annotation.SuppressLint;[m
+ import android.os.Bundle;[m
+ [m
+[31m-import androidx.annotation.NonNull;[m
+ import androidx.fragment.app.Fragment;[m
+[31m-import androidx.recyclerview.widget.LinearLayoutManager;[m
+[31m-import androidx.recyclerview.widget.RecyclerView;[m
+ [m
+ import android.view.LayoutInflater;[m
+ import android.view.View;[m
+ import android.view.ViewGroup;[m
+[31m-import android.widget.EditText;[m
+[31m-import android.widget.ImageButton;[m
+[31m-[m
+[31m-import com.google.firebase.auth.FirebaseAuth;[m
+[31m-import com.google.firebase.auth.FirebaseUser;[m
+[31m-import com.google.firebase.database.DatabaseReference;[m
+[31m-import com.google.firebase.database.FirebaseDatabase;[m
+[31m-[m
+[31m-import org.json.JSONArray;[m
+[31m-import org.json.JSONException;[m
+[31m-import org.json.JSONObject;[m
+[31m-[m
+[31m-import java.io.IOException;[m
+[31m-import java.util.ArrayList;[m
+[31m-import java.util.List;[m
+[31m-[m
+[31m-import okhttp3.Call;[m
+[31m-import okhttp3.Callback;[m
+[31m-import okhttp3.MediaType;[m
+[31m-import okhttp3.OkHttpClient;[m
+[31m-import okhttp3.Request;[m
+[31m-import okhttp3.RequestBody;[m
+[31m-import okhttp3.Response;[m
+ [m
+ /**[m
+  * A simple {@link Fragment} subclass.[m
+[36m@@ -41,15 +14,6 @@[m [mimport okhttp3.Response;[m
+  * create an instance of this fragment.[m
+  */[m
+ public class ChatFragment extends Fragment {[m
+[31m-    RecyclerView recyclerView;[m
+[31m-    EditText messageEditText;[m
+[31m-    ImageButton sendButton;[m
+[31m-    List<Message> messageList;[m
+[31m-    MessageAdapter messageAdapter;[m
+[31m-    DatabaseReference mDatabase;[m
+[31m-    FirebaseAuth mAuth;[m
+[31m-    public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");;[m
+[31m-    OkHttpClient client = new OkHttpClient();[m
+ [m
+     // TODO: Rename parameter arguments, choose names that match[m
+     // the fragment initialization parameters, e.g. ARG_ITEM_NUMBER[m
+[36m@@ -89,103 +53,12 @@[m [mpublic class ChatFragment extends Fragment {[m
+             mParam1 = getArguments().getString(ARG_PARAM1);[m
+             mParam2 = getArguments().getString(ARG_PARAM2);[m
+         }[m
+[31m-        messageList = new ArrayList<>();[m
+     }[m
+ [m
+     @Override[m
+     public View onCreateView(LayoutInflater inflater, ViewGroup container,[m
+                              Bundle savedInstanceState) {[m
+         // Inflate the layout for this fragment[m
+[31m-        View view = inflater.inflate(R.layout.fragment_chat, container, false);[m
+[31m-        messageList = new ArrayList<>();[m
+[31m-        recyclerView = view.findViewById(R.id.recycler_view);[m
+[31m-        messageEditText = view.findViewById(R.id.message_edit_text);[m
+[31m-        sendButton = view.findViewById(R.id.send_btn);[m
+[31m-[m
+[31m-        messageAdapter = new MessageAdapter(messageList);[m
+[31m-        recyclerView.setAdapter(messageAdapter);[m
+[31m-        LinearLayoutManager llm = new LinearLayoutManager(getContext());[m
+[31m-        llm.setStackFromEnd(true);[m
+[31m-        recyclerView.setLayoutManager(llm);[m
+[31m-[m
+[31m-        sendButton.setOnClickListener((v)->{[m
+[31m-            String question = messageEditText.getText().toString().trim();[m
+[31m-            addToChat(question,Message.SENT_BY_ME);[m
+[31m-            messageEditText.setText("");[m
+[31m-            callAPI(question);[m
+[31m-        });[m
+[31m-[m
+[31m-        return view;[m
+[31m-    }[m
+[31m-[m
+[31m-    void addToChat(String message, String sentBy) {[m
+[31m-        if (getActivity() != null) { // Make sure the fragment is attached to an activity[m
+[31m-            getActivity().runOnUiThread(new Runnable() {[m
+[31m-                @SuppressLint("NotifyDataSetChanged")[m
+[31m-                @Override[m
+[31m-                public void run() {[m
+[31m-                    messageList.add(new M

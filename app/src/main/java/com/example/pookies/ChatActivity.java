@@ -17,10 +17,15 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.material.navigation.NavigationView;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
 import java.io.IOException;
 
 public class ChatActivity extends AppCompatActivity {
+
+    private static final String PREFS_NAME = "APP_PREFS";
+    private static final String USER_ID_KEY = "USER_ID";
 
     DrawerLayout drawerLayout;
     ImageButton buttonDrawerToggle;
@@ -28,49 +33,57 @@ public class ChatActivity extends AppCompatActivity {
     ImageView userImage;
     TextView textUsername, textEmail;
     SharedPreferences prefs;
+    FirebaseAuth mAuth;
+    DBHelper dbHelper;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        mAuth = FirebaseAuth.getInstance();
+        prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        dbHelper = new DBHelper(this);
+
+        if (!isUserLoggedIn()) {
+            redirectToLogin();
+            return;
+        }
+
         setContentView(R.layout.activity_chat);
 
-        prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);
-        String userID = prefs.getString("USER_ID", null);
+        initializeViews();
+        setupNavigationDrawer();
+        loadUserData();
 
-        if (userID != null) {
-            DBHelper dbHelper = new DBHelper(this);
-            User currentUser = dbHelper.getUserByEmail(userID);
-            if (currentUser != null) {
-                String displayName = currentUser.getName();
-                String email = currentUser.getEmail();
-
-                Toast.makeText(this, "Welcome, " + displayName, Toast.LENGTH_SHORT).show();
-
-                drawerLayout = findViewById(R.id.drawerLayout);
-                buttonDrawerToggle = findViewById(R.id.buttonDrawerToggle);
-                navigationView = findViewById(R.id.navigationView);
-
-                buttonDrawerToggle.setOnClickListener(v -> drawerLayout.open());
-
-                View headerView = navigationView.getHeaderView(0);
-                userImage = headerView.findViewById(R.id.userImage);
-                textUsername = headerView.findViewById(R.id.textUsername);
-                textEmail = headerView.findViewById(R.id.textEmail);
-
-                textUsername.setText(displayName);
-                textEmail.setText(email);
-
-                loadProfilePicture();
-
-                userImage.setOnClickListener(v -> loadProfileFragment());
-                textUsername.setOnClickListener(v -> loadProfileFragment());
-
-            } else {
-                redirectToLogin();
-            }
-        } else {
-            redirectToLogin();
+        if (savedInstanceState == null) {
+            getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.fragment_container, new ChatFragment())
+                    .commit();
         }
+    }
+
+    private boolean isUserLoggedIn() {
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+        String userID = prefs.getString(USER_ID_KEY, null);
+        return firebaseUser != null || userID != null;
+    }
+
+    private void initializeViews() {
+        drawerLayout = findViewById(R.id.drawerLayout);
+        buttonDrawerToggle = findViewById(R.id.buttonDrawerToggle);
+        navigationView = findViewById(R.id.navigationView);
+
+        View headerView = navigationView.getHeaderView(0);
+        userImage = headerView.findViewById(R.id.userImage);
+        textUsername = headerView.findViewById(R.id.textUsername);
+        textEmail = headerView.findViewById(R.id.textEmail);
+    }
+
+    private void setupNavigationDrawer() {
+        buttonDrawerToggle.setOnClickListener(v -> drawerLayout.open());
+
+        userImage.setOnClickListener(v -> loadProfileFragment());
+        textUsername.setOnClickListener(v -> loadProfileFragment());
 
         navigationView.setNavigationItemSelectedListener(item -> {
             Fragment selectedFragment = null;
@@ -79,6 +92,8 @@ public class ChatActivity extends AppCompatActivity {
                 selectedFragment = new ChatFragment();
             } else if (itemId == R.id.navSettings) {
                 selectedFragment = new SettingsFragment();
+            } else if (itemId == R.id.navFeedback) {
+                selectedFragment = new FeedbackFragment();
             } else if (itemId == R.id.navLogout) {
                 logOutUser();
                 return true;
@@ -93,12 +108,32 @@ public class ChatActivity extends AppCompatActivity {
             drawerLayout.close();
             return true;
         });
+    }
 
-        if (savedInstanceState == null) {
-            getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragment_container, new ChatFragment())
-                    .commit();
+    private void loadUserData() {
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+        String userID = prefs.getString(USER_ID_KEY, null);
+
+        if (firebaseUser != null) {
+            // User is logged in with Firebase
+            textUsername.setText(firebaseUser.getDisplayName());
+            textEmail.setText(firebaseUser.getEmail());
+            Toast.makeText(this, "Welcome, " + firebaseUser.getDisplayName(), Toast.LENGTH_SHORT).show();
+        } else if (userID != null) {
+            // User is logged in with SharedPreferences
+            User currentUser = dbHelper.getUserByEmail(userID);
+            if (currentUser != null) {
+                textUsername.setText(currentUser.getName());
+                textEmail.setText(currentUser.getEmail());
+                Toast.makeText(this, "Welcome, " + currentUser.getName(), Toast.LENGTH_SHORT).show();
+            } else {
+                // User ID in SharedPreferences is invalid
+                logOutUser();
+                return;
+            }
         }
+
+        loadProfilePicture();
     }
 
     private void loadProfilePicture() {
@@ -132,26 +167,26 @@ public class ChatActivity extends AppCompatActivity {
 
     private void redirectToLogin() {
         Intent intent = new Intent(ChatActivity.this, LoginActivity.class);
-        startActivity(intent);
-        finish();
-    }
-
-    private void logOutUser() {
-        SharedPreferences prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);
-        prefs.edit().remove("USER_ID").apply();
-
-        Toast.makeText(ChatActivity.this, "You have been logged out", Toast.LENGTH_SHORT).show();
-
-        // Redirect to LoginActivity
-        Intent intent = new Intent(ChatActivity.this, LoginActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
     }
 
+    private void logOutUser() {
+        mAuth.signOut(); // Sign out from Firebase
+        prefs.edit().remove(USER_ID_KEY).apply(); // Clear SharedPreferences
+
+        Toast.makeText(ChatActivity.this, "You have been logged out", Toast.LENGTH_SHORT).show();
+        redirectToLogin();
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
-        loadProfilePicture();
+        if (!isUserLoggedIn()) {
+            redirectToLogin();
+        } else {
+            loadProfilePicture();
+        }
     }
 }
