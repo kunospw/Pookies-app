@@ -17,6 +17,11 @@ import android.widget.EditText;
 import android.widget.ImageButton;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -44,6 +49,7 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     boolean isBound = false;
     public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     OkHttpClient client = new OkHttpClient();
+    DatabaseReference mDatabase;
 
     private ServiceConnection connection = new ServiceConnection() {
         @Override
@@ -68,6 +74,7 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
         FirebaseUser user = mAuth.getCurrentUser();
         if (user != null) {
             userId = user.getUid();
+            mDatabase = FirebaseDatabase.getInstance().getReference("users").child(userId).child("messages");
         }
         dbHelper = new DBHelper(getContext());
         Intent intent = new Intent(getContext(), MessagingService.class);
@@ -112,29 +119,50 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
 
     private void loadChatHistory() {
         messageList.clear();
-        messageList.addAll(dbHelper.getAllMessages(userId));
-        messageAdapter.notifyDataSetChanged();
-        recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
+        // Load only from Firebase
+        mDatabase.addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                messageList.clear();
+                for (DataSnapshot messageSnapshot : dataSnapshot.getChildren()) {
+                    Message message = messageSnapshot.getValue(Message.class);
+                    if (message != null) {
+                        messageList.add(message);
+                    }
+                }
+                messageAdapter.notifyDataSetChanged();
+                recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError databaseError) {
+                // Handle possible errors
+            }
+        });
     }
 
     void addToChat(String message, String sentBy) {
         if (getActivity() != null) {
             getActivity().runOnUiThread(() -> {
                 Message newMessage = new Message(message, sentBy);
-                messageList.add(newMessage);
-                messageAdapter.notifyDataSetChanged();
-                recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
 
                 // Save message to SQLite
                 dbHelper.insertMessage(newMessage, userId);
 
                 // Save message to Firebase
+                String messageId = mDatabase.push().getKey();
+                if (messageId != null) {
+                    mDatabase.child(messageId).setValue(newMessage);
+                }
+
+                // Send message through MessagingService
                 if (isBound) {
                     messagingService.sendMessage(newMessage);
                 }
             });
         }
     }
+
 
     void addResponse(String response) {
         addToChat(response, Message.SENT_BY_BOT);
@@ -203,12 +231,11 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     public void onNewMessage(Message message) {
         if (getActivity() != null) {
             getActivity().runOnUiThread(() -> {
-                messageList.add(message);
-                messageAdapter.notifyDataSetChanged();
-                recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
-
                 // Save the new message to SQLite
                 dbHelper.insertMessage(message, userId);
+
+                // Note: We don't add the message to the messageList or update the UI here
+                // because the ValueEventListener in loadChatHistory will handle that
             });
         }
     }
