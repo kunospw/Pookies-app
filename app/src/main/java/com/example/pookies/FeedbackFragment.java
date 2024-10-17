@@ -35,7 +35,7 @@ public class FeedbackFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        dbHelper = new DBHelper(getContext());
+        dbHelper = new DBHelper(getContext()); // Initialize SQLite helper
     }
 
     @Override
@@ -45,15 +45,17 @@ public class FeedbackFragment extends Fragment {
         mAuth = FirebaseAuth.getInstance();
         mDatabase = FirebaseDatabase.getInstance().getReference();
 
+        // UI element binding
         radioGroup = view.findViewById(R.id.feedbackType);
         editTextFeedback = view.findViewById(R.id.feedbackText);
         errorTextView = view.findViewById(R.id.errorTextView);
         submitButton = view.findViewById(R.id.submitButton);
 
+        // Set button listener
         submitButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                submitFeedback();
+                submitFeedback(); // Submit feedback
             }
         });
 
@@ -63,12 +65,14 @@ public class FeedbackFragment extends Fragment {
     private void submitFeedback() {
         int selectedRadioButtonId = radioGroup.getCheckedRadioButtonId();
 
+        // Check if a feedback type is selected
         if (selectedRadioButtonId == -1) {
             errorTextView.setVisibility(View.VISIBLE);
             errorTextView.setText("Please select a feedback type.");
             return;
         }
 
+        // Get feedback text and check if it's at least 5 words
         String feedbackDescription = editTextFeedback.getText().toString().trim();
         if (feedbackDescription.split("\\s+").length < 5) {
             errorTextView.setVisibility(View.VISIBLE);
@@ -76,6 +80,7 @@ public class FeedbackFragment extends Fragment {
             return;
         }
 
+        // If validation passes, hide error messages
         errorTextView.setVisibility(View.GONE);
 
         RadioButton selectedRadioButton = radioGroup.findViewById(selectedRadioButtonId);
@@ -83,10 +88,11 @@ public class FeedbackFragment extends Fragment {
 
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser != null) {
+            // Get user details
             String userId = currentUser.getUid();
             String username = currentUser.getDisplayName() != null ? currentUser.getDisplayName() : "Anonymous";
             String email = currentUser.getEmail() != null ? currentUser.getEmail() : "No Email";
-            String currentTime = getCurrentTime();
+            String currentTime = getCurrentTime(); // Get current time
 
             Feedback feedback = new Feedback(
                     userId,
@@ -97,15 +103,16 @@ public class FeedbackFragment extends Fragment {
                     currentTime
             );
 
-            // Save to Firebase
+            // Save feedback to Firebase
             mDatabase.child("feedback").child(userId).push().setValue(feedback)
                     .addOnCompleteListener(task -> {
                         if (task.isSuccessful()) {
-                            // Save to SQLite
+                            // Save to SQLite as backup
                             saveFeedbackToSQLite(feedback);
                             Toast.makeText(getContext(), "Feedback submitted successfully!", Toast.LENGTH_SHORT).show();
-                            clearForm();
+                            clearForm(); // Clear form after successful submission
                         } else {
+                            // If Firebase save fails, save feedback locally in SQLite
                             Toast.makeText(getContext(), "Failed to submit feedback to Firebase. Saving locally.", Toast.LENGTH_SHORT).show();
                             saveFeedbackToSQLite(feedback);
                         }
@@ -116,6 +123,8 @@ public class FeedbackFragment extends Fragment {
     private void saveFeedbackToSQLite(Feedback feedback) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         ContentValues values = new ContentValues();
+
+        // Insert feedback data into SQLite database
         values.put("userId", feedback.getUserId());
         values.put("username", feedback.getUsername());
         values.put("email", feedback.getEmail());
@@ -123,6 +132,7 @@ public class FeedbackFragment extends Fragment {
         values.put("description", feedback.getDescription());
         values.put("feedbackTime", feedback.getFeedbackTime());
 
+        // Insert feedback data into SQLite and handle possible error
         long newRowId = db.insert("feedback", null, values);
         if (newRowId == -1) {
             Toast.makeText(getContext(), "Error saving feedback locally", Toast.LENGTH_SHORT).show();
@@ -132,11 +142,13 @@ public class FeedbackFragment extends Fragment {
     }
 
     private String getCurrentTime() {
+        // Get the current time in a specific format
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
         return sdf.format(new Date());
     }
 
     private void clearForm() {
+        // Clear the form fields after submission
         radioGroup.clearCheck();
         editTextFeedback.setText("");
     }
@@ -145,7 +157,7 @@ public class FeedbackFragment extends Fragment {
     public void onDestroy() {
         super.onDestroy();
         if (dbHelper != null) {
-            dbHelper.close();
+            dbHelper.close(); // Close database when fragment is destroyed
         }
     }
 }

@@ -1,6 +1,8 @@
 package com.example.pookies;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
@@ -31,11 +33,8 @@ public class RegisterActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_register);
 
-        // Initialize SQLite DB Helper
-        dbHelper = new DBHelper(this);
-
-        // Initialize Firebase Auth
-        mAuth = FirebaseAuth.getInstance();
+        dbHelper = new DBHelper(this);  // Initialize SQLite DB Helper
+        mAuth = FirebaseAuth.getInstance();  // Initialize Firebase Auth
 
         // Initialize views
         etEmail = findViewById(R.id.emailInput);
@@ -45,6 +44,7 @@ public class RegisterActivity extends AppCompatActivity {
         btnSignUp = findViewById(R.id.signupButton);
         tvAlreadyHaveAccount = findViewById(R.id.alreadyHaveAccount);
 
+        // Navigate to LoginActivity if user already has an account
         tvAlreadyHaveAccount.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -53,6 +53,7 @@ public class RegisterActivity extends AppCompatActivity {
             }
         });
 
+        // Register user when sign up button is clicked
         btnSignUp.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -67,7 +68,7 @@ public class RegisterActivity extends AppCompatActivity {
         String password = etPassword.getText().toString().trim();
         String confirmPassword = etConfirmPassword.getText().toString().trim();
 
-        // Simple validation
+        // Basic validation
         if (TextUtils.isEmpty(email) || TextUtils.isEmpty(name) || TextUtils.isEmpty(password) || TextUtils.isEmpty(confirmPassword)) {
             Toast.makeText(RegisterActivity.this, "All fields are required", Toast.LENGTH_SHORT).show();
             return;
@@ -78,7 +79,7 @@ public class RegisterActivity extends AppCompatActivity {
             return;
         }
 
-        // Check if user already exists in SQLite
+        // Check if the user already exists in SQLite
         User existingUser = dbHelper.getUserByEmail(email);
         if (existingUser != null) {
             Toast.makeText(RegisterActivity.this, "User already exists with this email", Toast.LENGTH_SHORT).show();
@@ -91,7 +92,7 @@ public class RegisterActivity extends AppCompatActivity {
                     @Override
                     public void onComplete(@NonNull Task<AuthResult> task) {
                         if (task.isSuccessful()) {
-                            // Firebase registration successful, now update profile and register in SQLite
+                            // Firebase registration successful, update Firebase profile and register user in SQLite
                             updateFirebaseProfile(name);
                             registerInSQLite(email, name, password);
                         } else {
@@ -102,6 +103,7 @@ public class RegisterActivity extends AppCompatActivity {
                 });
     }
 
+    // Update Firebase profile with the user's name
     private void updateFirebaseProfile(String name) {
         UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
                 .setDisplayName(name)
@@ -118,22 +120,27 @@ public class RegisterActivity extends AppCompatActivity {
                 });
     }
 
+    // Register user in SQLite database
     private void registerInSQLite(String email, String name, String password) {
         boolean success = dbHelper.insertUser(email, name, password);
         if (success) {
             Toast.makeText(RegisterActivity.this, "Registration successful", Toast.LENGTH_SHORT).show();
-            // Save the user ID (email) in SharedPreferences for session management
+            // Registration successful, save user ID in SharedPreferences for session management
             getSharedPreferences("APP_PREFS", MODE_PRIVATE)
                     .edit()
                     .putString("USER_ID", email)
                     .apply();
+
+            // Redirect to LoginActivity
             Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
             startActivity(intent);
             finish();
         } else {
-            Toast.makeText(RegisterActivity.this, "SQLite Registration failed", Toast.LENGTH_SHORT).show();
-            // Consider removing the user from Firebase if SQLite registration fails
-            mAuth.getCurrentUser().delete();
+            // SQLite registration failed, rollback Firebase user creation
+            Toast.makeText(RegisterActivity.this, "SQLite registration failed", Toast.LENGTH_SHORT).show();
+            if (mAuth.getCurrentUser() != null) {
+                mAuth.getCurrentUser().delete();  // Remove the user from Firebase
+            }
         }
     }
 }

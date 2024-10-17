@@ -17,6 +17,11 @@ import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
+
+
 public class LoginActivity extends AppCompatActivity {
 
     EditText etEmail, etPassword;
@@ -30,7 +35,9 @@ public class LoginActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
 
-        dbHelper = new DBHelper(this);  // Initialize SQLite DB Helper
+        DBHelper dbHelper = new DBHelper(this);        // Initialize SQLite DB Helper
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+
         mAuth = FirebaseAuth.getInstance();  // Initialize Firebase Auth
 
         etEmail = findViewById(R.id.emailInput);

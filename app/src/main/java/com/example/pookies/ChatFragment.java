@@ -1,35 +1,28 @@
 package com.example.pookies;
 
-import android.annotation.SuppressLint;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.os.Bundle;
-
+import android.os.IBinder;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageButton;
-
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
-import com.google.firebase.database.DatabaseReference;
-import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ValueEventListener;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.MediaType;
@@ -38,63 +31,53 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
-/**
- * A simple {@link Fragment} subclass.
- * Use the {@link ChatFragment#newInstance} factory method to
- * create an instance of this fragment.
- */
-public class ChatFragment extends Fragment {
+public class ChatFragment extends Fragment implements MessagingService.MessageListener {
     RecyclerView recyclerView;
     EditText messageEditText;
     ImageButton sendButton;
     List<Message> messageList;
     MessageAdapter messageAdapter;
-    DatabaseReference mDatabase;
     FirebaseAuth mAuth;
+    String userId;
+    DBHelper dbHelper;
+    MessagingService messagingService;
+    boolean isBound = false;
     public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     OkHttpClient client = new OkHttpClient();
 
-    private static final String ARG_PARAM1 = "param1";
-    private static final String ARG_PARAM2 = "param2";
+    private ServiceConnection connection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName className, IBinder service) {
+            MessagingService.LocalBinder binder = (MessagingService.LocalBinder) service;
+            messagingService = binder.getService();
+            messagingService.addMessageListener(ChatFragment.this);
+            isBound = true;
+        }
 
-    private String mParam1;
-    private String mParam2;
-
-    public ChatFragment() {
-        // Required empty public constructor
-    }
-
-    public static ChatFragment newInstance(String param1, String param2) {
-        ChatFragment fragment = new ChatFragment();
-        Bundle args = new Bundle();
-        args.putString(ARG_PARAM1, param1);
-        args.putString(ARG_PARAM2, param2);
-        fragment.setArguments(args);
-        return fragment;
-    }
+        @Override
+        public void onServiceDisconnected(ComponentName arg0) {
+            isBound = false;
+        }
+    };
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (getArguments() != null) {
-            mParam1 = getArguments().getString(ARG_PARAM1);
-            mParam2 = getArguments().getString(ARG_PARAM2);
-        }
         messageList = new ArrayList<>();
         mAuth = FirebaseAuth.getInstance();
         FirebaseUser user = mAuth.getCurrentUser();
         if (user != null) {
-            String userId = user.getUid();
-            mDatabase = FirebaseDatabase.getInstance().getReference("users").child(userId).child("messages");
-            loadChatHistory();
+            userId = user.getUid();
         }
+        dbHelper = new DBHelper(getContext());
+        Intent intent = new Intent(getContext(), MessagingService.class);
+        getActivity().bindService(intent, connection, Context.BIND_AUTO_CREATE);
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_chat, container, false);
-        messageList = new ArrayList<>();
         recyclerView = view.findViewById(R.id.recycler_view);
         messageEditText = view.findViewById(R.id.message_edit_text);
         sendButton = view.findViewById(R.id.send_btn);
@@ -112,43 +95,42 @@ public class ChatFragment extends Fragment {
             callAPI(question);
         });
 
+        loadChatHistory();
+
         return view;
     }
 
-    private void loadChatHistory() {
-        mDatabase.addValueEventListener(new ValueEventListener() {
-            @Override
-            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                messageList.clear();
-                for (DataSnapshot messageSnapshot : dataSnapshot.getChildren()) {
-                    String message = messageSnapshot.child("message").getValue(String.class);
-                    String sentBy = messageSnapshot.child("sentBy").getValue(String.class);
-                    if (message != null && sentBy != null) {
-                        messageList.add(new Message(message, sentBy));
-                    }
-                }
-                messageAdapter.notifyDataSetChanged();
-                recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
-            }
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        if (isBound) {
+            messagingService.removeMessageListener(this);
+            getActivity().unbindService(connection);
+            isBound = false;
+        }
+    }
 
-            @Override
-            public void onCancelled(@NonNull DatabaseError databaseError) {
-                // Handle possible errors
-            }
-        });
+    private void loadChatHistory() {
+        messageList.clear();
+        messageList.addAll(dbHelper.getAllMessages(userId));
+        messageAdapter.notifyDataSetChanged();
+        recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
     }
 
     void addToChat(String message, String sentBy) {
         if (getActivity() != null) {
             getActivity().runOnUiThread(() -> {
-                messageList.add(new Message(message, sentBy));
+                Message newMessage = new Message(message, sentBy);
+                messageList.add(newMessage);
                 messageAdapter.notifyDataSetChanged();
                 recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
 
+                // Save message to SQLite
+                dbHelper.insertMessage(newMessage, userId);
+
                 // Save message to Firebase
-                String messageId = mDatabase.push().getKey(); // Generate a unique key for each message
-                if (messageId != null) {
-                    mDatabase.child(messageId).setValue(new Message(message, sentBy));
+                if (isBound) {
+                    messagingService.sendMessage(newMessage);
                 }
             });
         }
@@ -215,5 +197,19 @@ public class ChatFragment extends Fragment {
                 }
             }
         });
+    }
+
+    @Override
+    public void onNewMessage(Message message) {
+        if (getActivity() != null) {
+            getActivity().runOnUiThread(() -> {
+                messageList.add(message);
+                messageAdapter.notifyDataSetChanged();
+                recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
+
+                // Save the new message to SQLite
+                dbHelper.insertMessage(message, userId);
+            });
+        }
     }
 }

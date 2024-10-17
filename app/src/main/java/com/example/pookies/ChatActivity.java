@@ -22,156 +22,145 @@ import com.google.firebase.auth.FirebaseUser;
 public class ChatActivity extends AppCompatActivity {
 
     DrawerLayout drawerLayout;
-    ImageButton buttonDrawerToogle;
+    ImageButton buttonDrawerToggle;
     NavigationView navigationView;
     ImageView userImage;
     TextView textUsername, textEmail;
+    DBHelper dbHelper;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
 
-        // Initialize Firebase User
+        dbHelper = new DBHelper(this);
+
         FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
-
         if (currentUser != null) {
-            // Get user ID, display name, and email from Firebase
-            String userID = currentUser.getUid(); // Store this for session management
-            String displayName = currentUser.getDisplayName(); // Display this to the user
-            String email = currentUser.getEmail(); // Get user email
+            String firebaseUserID = currentUser.getUid();
+            String email = currentUser.getEmail();
 
-            // Save user ID in SharedPreferences
+            // Save userID to SharedPreferences
             SharedPreferences prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);
             SharedPreferences.Editor editor = prefs.edit();
-            editor.putString("USER_ID", userID);  // Store user ID in SharedPreferences
+            editor.putString("USER_ID", firebaseUserID);
             editor.apply();
 
-            // Toast a welcome message with the username
-            if (displayName != null && !displayName.isEmpty()) {
-                Toast.makeText(this, "Welcome, " + displayName, Toast.LENGTH_SHORT).show();
+            // Retrieve user data from SQLite
+            User localUser = dbHelper.getUserByEmail(email);
+            if (localUser == null) {
+                // If user doesn't exist in SQLite, create a new entry
+                String displayName = currentUser.getDisplayName();
+                dbHelper.insertUser(email, displayName, ""); // Password field left empty as it's managed by Firebase
+                localUser = dbHelper.getUserByEmail(email);
+            }
+
+            // Initialize UI components
+            initializeUI();
+
+            // Set user data in the navigation header
+            if (localUser != null) {
+                textUsername.setText(localUser.getName());
+                textEmail.setText(localUser.getEmail());
+                Toast.makeText(this, "Welcome, " + localUser.getName(), Toast.LENGTH_SHORT).show();
             } else {
                 Toast.makeText(this, "Welcome, User", Toast.LENGTH_SHORT).show();
             }
 
-            // Initialize navigation drawer and header
-            drawerLayout = findViewById(R.id.drawerLayout);
-            buttonDrawerToogle = findViewById(R.id.buttonDrawerToggle);
-            navigationView = findViewById(R.id.navigationView);
-
-            buttonDrawerToogle.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    drawerLayout.open();
-                }
-            });
-
-            // Initialize header view for user image and username
-            View headerView = navigationView.getHeaderView(0);
-            userImage = headerView.findViewById(R.id.userImage);
-            textUsername = headerView.findViewById(R.id.textUsername);
-            textEmail = headerView.findViewById(R.id.textEmail);  // Assuming you added a TextView for email
-
-            // Set username and email in the header
-            if (displayName != null && !displayName.isEmpty()) {
-                textUsername.setText(displayName);  // Set username in TextView
-            } else {
-                textUsername.setText("User");
-            }
-
-            textEmail.setText(email);  // Set email in TextView
-
-            // Set click listener for userImage and textUsername to open ProfileFragment
+            // Set click listeners for userImage and textUsername to open ProfileFragment
             userImage.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
-                    // Load ProfileFragment
-                    getSupportFragmentManager().beginTransaction()
-                            .replace(R.id.fragment_container, new ProfileFragment())
-                            .commit();
-                    // Close drawer after fragment is replaced
-                    drawerLayout.close();
+                    loadProfileFragment();
                 }
             });
 
             textUsername.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
-                    // Load ProfileFragment
-                    getSupportFragmentManager().beginTransaction()
-                            .replace(R.id.fragment_container, new ProfileFragment())
-                            .commit();
-                    // Close drawer after fragment is replaced
-                    drawerLayout.close();
+                    loadProfileFragment();
                 }
             });
 
         } else {
-            // No user is logged in, redirect to LoginActivity
-            Intent intent = new Intent(ChatActivity.this, LoginActivity.class);
-            startActivity(intent);
-            finish();
+            // No Firebase user is logged in, redirect to LoginActivity
+            redirectToLogin();
         }
 
-        // Set navigation item listener
-        navigationView.setNavigationItemSelectedListener(new NavigationView.OnNavigationItemSelectedListener() {
-            @Override
-            public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-                Fragment selectedFragment = null;
-
-                // Replace fragments based on which menu item is clicked
-                int itemId = item.getItemId();
-                if (itemId == R.id.navChat) {
-                    selectedFragment = new ChatFragment();
-                } else if (itemId == R.id.navSettings) {
-                    selectedFragment = new SettingsFragment();
-                } else if (itemId == R.id.navFeedback) {
-                    selectedFragment = new FeedbackFragment();
-                } else if (itemId == R.id.navAbout) {
-                    selectedFragment = new AboutFragment();
-                } else if (itemId == R.id.navPolicy) {
-                    selectedFragment = new PolicyFragment();
-                } else if (itemId == R.id.navBluetooth) {
-                    selectedFragment = new BluetoothFragment(); // Load BluetoothFragment
-                } else if (itemId == R.id.navLogout) {
-                    logOutUser();
-                    return true;
-                }
-
-                // Replace the fragment if one was selected
-                if (selectedFragment != null) {
-                    getSupportFragmentManager().beginTransaction()
-                            .replace(R.id.fragment_container, selectedFragment) // 'fragment_container' is the ID of the FrameLayout in activity_content.xml
-                            .commit();
-                }
-
-                drawerLayout.close();
-                return true;
-            }
-        });
+        setupNavigationDrawer();
 
         // Load default fragment (ChatFragment)
         if (savedInstanceState == null) {
-            getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragment_container, new ChatFragment())
-                    .commit();
+            loadFragment(new ChatFragment());
         }
     }
 
-    // Method to log out the user
+    private void initializeUI() {
+        drawerLayout = findViewById(R.id.drawerLayout);
+        buttonDrawerToggle = findViewById(R.id.buttonDrawerToggle);
+        navigationView = findViewById(R.id.navigationView);
+
+        View headerView = navigationView.getHeaderView(0);
+        userImage = headerView.findViewById(R.id.userImage);
+        textUsername = headerView.findViewById(R.id.textUsername);
+        textEmail = headerView.findViewById(R.id.textEmail);
+
+        buttonDrawerToggle.setOnClickListener(v -> drawerLayout.open());
+    }
+
+    private void setupNavigationDrawer() {
+        navigationView.setNavigationItemSelectedListener(item -> {
+            Fragment selectedFragment = null;
+            int itemId = item.getItemId();
+
+            if (itemId == R.id.navChat) {
+                selectedFragment = new ChatFragment();
+            } else if (itemId == R.id.navSettings) {
+                selectedFragment = new SettingsFragment();
+            } else if (itemId == R.id.navFeedback) {
+                selectedFragment = new FeedbackFragment();
+            } else if (itemId == R.id.navAbout) {
+                selectedFragment = new AboutFragment();
+            } else if (itemId == R.id.navPolicy) {
+                selectedFragment = new PolicyFragment();
+            } else if (itemId == R.id.navBluetooth) {
+                selectedFragment = new BluetoothFragment();
+            } else if (itemId == R.id.navLogout) {
+                logOutUser();
+                return true;
+            }
+
+            if (selectedFragment != null) {
+                loadFragment(selectedFragment);
+            }
+
+            drawerLayout.close();
+            return true;
+        });
+    }
+
+    private void loadFragment(Fragment fragment) {
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.fragment_container, fragment)
+                .commit();
+    }
+
+    private void loadProfileFragment() {
+        loadFragment(new ProfileFragment());
+        drawerLayout.close();
+    }
+
     private void logOutUser() {
-        FirebaseAuth.getInstance().signOut(); // Sign out the user
-
-        // Clear UID from SharedPreferences
+        FirebaseAuth.getInstance().signOut();
         getSharedPreferences("APP_PREFS", MODE_PRIVATE).edit().remove("USER_ID").apply();
-
-        // Show a toast message to confirm logout
         Toast.makeText(ChatActivity.this, "You have been logged out", Toast.LENGTH_SHORT).show();
+        redirectToLogin();
+    }
 
-        // Redirect to LoginActivity
+    private void redirectToLogin() {
         Intent intent = new Intent(ChatActivity.this, LoginActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK); // Clear activity stack
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
-        finish(); // Close ChatActivity
+        finish();
     }
 }
