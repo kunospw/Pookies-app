@@ -1,18 +1,53 @@
-<!-- res/layout/fragment_bluetooth.xml -->
+<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:padding="16dp">
 
-    <Button
-        android:id="@+id/search_btn"
-        android:layout_width="wrap_content"
+    <TextView
+        android:id="@+id/status_text"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Search for devices" />
+        android:layout_marginBottom="16dp"
+        android:gravity="center"
+        android:text="Bluetooth Status: Not Ready"
+        android:textSize="16sp" />
+
+    <Button
+        android:id="@+id/enable_bt_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Enable Bluetooth"
+        android:layout_marginBottom="8dp" />
+
+    <Button
+        android:id="@+id/discover_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Discover Devices"
+        android:layout_marginBottom="16dp"
+        android:enabled="false" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Available Devices:"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp" />
 
     <ListView
-        android:id="@+id/devices_list_view"
+        android:id="@+id/devices_list"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:background="@android:color/white" />
+
+    <ProgressBar
+        android:id="@+id/progress_bar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:visibility="gone" />
+
 </LinearLayout>
