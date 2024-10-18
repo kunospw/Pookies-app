@@ -1,0 +1,19 @@
+<!-- res/layout/activity_intro.xml -->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:background="@drawable/background_blue">
+
+    <TextView
+        android:id="@+id/shakePromptTextView"
+        android:layout_width="300dp"
+        android:layout_height="wrap_content"
+        android:text="Shake your phone to meet your new buddy!"
+        android:textSize="24sp"
+        android:fontFamily="@font/montserrat"
+        android:textStyle="bold"
+        android:textColor="@color/white"
+        android:gravity="center"/>
+
+</RelativeLayout>

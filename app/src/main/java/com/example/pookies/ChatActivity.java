@@ -1,8 +1,9 @@
 package com.example.pookies;
 
+import android.Manifest;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.net.Uri;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.view.MenuItem;
 import android.view.View;
@@ -13,6 +14,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 
@@ -33,6 +35,7 @@ public class ChatActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
+        checkBluetoothPermission();
 
         dbHelper = new DBHelper(this);
 
@@ -107,25 +110,6 @@ public class ChatActivity extends AppCompatActivity {
         textEmail = headerView.findViewById(R.id.textEmail);
 
         buttonDrawerToggle.setOnClickListener(v -> drawerLayout.open());
-        loadProfilePicture();
-    }
-
-    private void loadProfilePicture() {
-        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
-        if (currentUser != null) {
-            SharedPreferences prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);
-            String profilePicUri = prefs.getString("PROFILE_PIC_URI_" + currentUser.getUid(), null);
-
-            if (profilePicUri != null) {
-                // Load the image from URI
-                userImage.setImageURI(Uri.parse(profilePicUri));
-            } else {
-                // Set a default profile image if no URI is found
-                userImage.setImageResource(R.drawable.person); // Default image resource
-            }
-        } else {
-            userImage.setImageResource(R.drawable.person); // Default image if user is not logged in
-        }
     }
 
     private void setupNavigationDrawer() {
@@ -182,5 +166,16 @@ public class ChatActivity extends AppCompatActivity {
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
+    }
+    private void checkBluetoothPermission() {
+        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{
+                    android.Manifest.permission.BLUETOOTH,
+                    android.Manifest.permission.BLUETOOTH_ADMIN,
+                    android.Manifest.permission.ACCESS_FINE_LOCATION
+            }, 1);
+        }
     }
 }

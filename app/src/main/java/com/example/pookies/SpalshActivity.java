@@ -7,8 +7,9 @@ import android.view.animation.AnimationUtils;
 import android.widget.ImageView;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.example.pookies.R;
 public class SpalshActivity extends AppCompatActivity {
+
+    private ShakeListener shakeListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -30,7 +31,7 @@ public class SpalshActivity extends AppCompatActivity {
 
             @Override
             public void onAnimationEnd(Animation animation) {
-                // When the animation ends, transition to RegisterActivity
+                // When the animation ends, transition to MainActivity
                 Intent intent = new Intent(SpalshActivity.this, MainActivity.class);
                 startActivity(intent);
                 finish(); // Close the splash activity
@@ -42,7 +43,30 @@ public class SpalshActivity extends AppCompatActivity {
             }
         });
 
+        // Start the shake listener
+        shakeListener = new ShakeListener(this, this::onShakeDetected);
+        shakeListener.start();
+
         // Start the animation
         loadingImage.startAnimation(rotateAnimation);
+    }
+
+    private void onShakeDetected() {
+        // Directly transition to MainActivity when shake is detected
+        Intent intent = new Intent(SpalshActivity.this, MainActivity.class);
+        startActivity(intent);
+        finish();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        shakeListener.start(); // Register the shake listener when the activity is resumed
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        shakeListener.stop(); // Unregister the shake listener when the activity is paused
     }
 }
