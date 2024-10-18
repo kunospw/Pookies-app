@@ -47,6 +47,6 @@ dependencies {
     implementation(libs.circleimageview)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.ai.client.generativeai:generativeai:0.7.0")
-    implementation ("com.google.android.material:material:1.8.0")  // or your version
+    implementation ("com.google.android.material:material:1.8.0")
 
 }
