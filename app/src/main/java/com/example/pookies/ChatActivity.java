@@ -2,6 +2,7 @@ package com.example.pookies;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.MenuItem;
 import android.view.View;
@@ -106,6 +107,25 @@ public class ChatActivity extends AppCompatActivity {
         textEmail = headerView.findViewById(R.id.textEmail);
 
         buttonDrawerToggle.setOnClickListener(v -> drawerLayout.open());
+        loadProfilePicture();
+    }
+
+    private void loadProfilePicture() {
+        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SharedPreferences prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);
+            String profilePicUri = prefs.getString("PROFILE_PIC_URI_" + currentUser.getUid(), null);
+
+            if (profilePicUri != null) {
+                // Load the image from URI
+                userImage.setImageURI(Uri.parse(profilePicUri));
+            } else {
+                // Set a default profile image if no URI is found
+                userImage.setImageResource(R.drawable.person); // Default image resource
+            }
+        } else {
+            userImage.setImageResource(R.drawable.person); // Default image if user is not logged in
+        }
     }
 
     private void setupNavigationDrawer() {

@@ -6,48 +6,28 @@
     android:padding="16dp">
 
     <TextView
-        android:id="@+id/status_text"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:gravity="center"
-        android:text="Bluetooth Status: Not Ready"
-        android:textSize="16sp" />
-
-    <Button
-        android:id="@+id/enable_bt_btn"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Enable Bluetooth"
-        android:layout_marginBottom="8dp" />
-
-    <Button
-        android:id="@+id/discover_btn"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Discover Devices"
-        android:layout_marginBottom="16dp"
-        android:enabled="false" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Available Devices:"
-        android:textStyle="bold"
-        android:layout_marginBottom="8dp" />
-
-    <ListView
-        android:id="@+id/devices_list"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:background="@android:color/white" />
-
-    <ProgressBar
-        android:id="@+id/progress_bar"
+        android:id="@+id/statusTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:visibility="gone" />
+        android:text="Bluetooth Status"
+        android:textSize="18sp"
+        android:layout_gravity="center"/>
 
+    <Button
+        android:id="@+id/pairButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Pair with Device" />
+
+    <Button
+        android:id="@+id/connectButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Connect to Device" />
+
+    <ListView
+        android:id="@+id/deviceListView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"/>
 </LinearLayout>

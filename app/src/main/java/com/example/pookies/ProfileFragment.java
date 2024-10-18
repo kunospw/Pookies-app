@@ -1,10 +1,13 @@
 package com.example.pookies;
 
 import android.app.Activity;
+import android.Manifest;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
@@ -17,6 +20,8 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
@@ -28,10 +33,14 @@ import com.google.firebase.auth.UserProfileChangeRequest;  // Ensure correct imp
 
 import static android.content.Context.MODE_PRIVATE;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
 public class ProfileFragment extends Fragment {
 
     private static final String PREFS_NAME = "APP_PREFS";
     private static final String USER_ID_KEY = "USER_ID";
+
 
     private EditText usernameEditText, emailEditText, passwordEditText;
     private ShapeableImageView profileImageView;
@@ -40,10 +49,19 @@ public class ProfileFragment extends Fragment {
 
     private static final int REQUEST_CAMERA = 100;
     private static final int REQUEST_GALLERY = 101;
+    private static final int CAMERA_PERMISSION_CODE = 102;
 
     private FirebaseAuth mAuth;
     private DBHelper dbHelper;
     private SharedPreferences prefs;
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mAuth = FirebaseAuth.getInstance();
+        dbHelper = new DBHelper(requireContext());
+        prefs = requireContext().getSharedPreferences(PREFS_NAME, Activity.MODE_PRIVATE);
+    }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -56,6 +74,23 @@ public class ProfileFragment extends Fragment {
         return view;
     }
 
+    @Override
+    public void onStart() {
+        super.onStart();
+        // Check if user is signed in (non-null) and update UI accordingly.
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+        if(currentUser == null){
+            // User is not signed in, navigate to login activity
+            navigateToLogin();
+        }
+    }
+
+    private void navigateToLogin() {
+        // Replace this with your actual login activity
+        Intent intent = new Intent(getActivity(), LoginActivity.class);
+        startActivity(intent);
+        getActivity().finish();
+    }
     private void initializeViews(View view) {
         usernameEditText = view.findViewById(R.id.username);
         emailEditText = view.findViewById(R.id.email);
@@ -84,27 +119,52 @@ public class ProfileFragment extends Fragment {
             // User is logged in with Firebase
             emailEditText.setText(firebaseUser.getEmail());
             usernameEditText.setText(firebaseUser.getDisplayName());
+            loadProfilePictureFromDatabase(firebaseUser.getEmail());
+            loadProfilePicture();
         } else if (userID != null) {
             // User is logged in with SharedPreferences
             User currentUser = dbHelper.getUserByEmail(userID);
             if (currentUser != null) {
                 emailEditText.setText(currentUser.getEmail());
                 usernameEditText.setText(currentUser.getName());
+                loadProfilePictureFromDatabase(currentUser.getEmail());
+            }else {
+                // User not found in local database, navigate to login
+                navigateToLogin();
+                return;
             }
+        } else {
+            navigateToLogin();
         }
 
         passwordEditText.setText("********"); // Show 8 asterisks as a placeholder for password
         loadProfilePicture();
     }
 
-    private void loadProfilePicture() {
-        String profilePicUri = prefs.getString("PROFILE_PIC_URI", null);
-        if (profilePicUri != null) {
-            profileImageView.setImageURI(Uri.parse(profilePicUri));
+    private void loadProfilePictureFromDatabase(String email) {
+        byte[] profilePicBytes = dbHelper.getProfilePictureByEmail(email);
+        if (profilePicBytes != null) {
+            Bitmap profileBitmap = byteArrayToBitmap(profilePicBytes);
+            profileImageView.setImageBitmap(profileBitmap);
         } else {
             profileImageView.setImageResource(R.drawable.baseline_person_24);
         }
     }
+    private void loadProfilePicture() {
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+
+        if (firebaseUser != null) {
+            // Get the URI for the profile picture of this user
+            String profilePicUri = prefs.getString("PROFILE_PIC_URI_" + firebaseUser.getUid(), null);
+            if (profilePicUri != null) {
+                profileImageView.setImageURI(Uri.parse(profilePicUri));
+            } else {
+                profileImageView.setImageResource(R.drawable.baseline_person_24); // Default profile picture
+            }
+        }
+    }
+
+
 
     private void showImagePickerDialog() {
         CharSequence[] options = {"Take Photo", "Choose from Gallery", "Remove Profile Picture", "Cancel"};
@@ -123,8 +183,26 @@ public class ProfileFragment extends Fragment {
     }
 
     private void openCamera() {
-        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        startActivityForResult(intent, REQUEST_CAMERA);
+        if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            // Request the CAMERA permission
+            ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA);
+        } else {
+            // Permission has already been granted, open the camera
+            Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            startActivityForResult(intent, REQUEST_CAMERA);
+        }
+    }
+
+
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        if (requestCode == CAMERA_PERMISSION_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                openCamera(); // Permission granted, proceed to open camera
+            } else {
+                Toast.makeText(getContext(), "Camera permission is required to take photos", Toast.LENGTH_SHORT).show();
+            }
+        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
     private void openGallery() {
@@ -219,6 +297,11 @@ public class ProfileFragment extends Fragment {
             firebaseUser.updateEmail(newEmail)
                     .addOnCompleteListener(task -> {
                         if (task.isSuccessful()) {
+                            // Update firebase user profile
+                            UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
+                                    .setDisplayName(newUsername)
+                                    .build();
+
                             // Update Firebase username
                             firebaseUser.updateProfile(new UserProfileChangeRequest.Builder()
                                             .setDisplayName(newUsername)
@@ -251,6 +334,7 @@ public class ProfileFragment extends Fragment {
                 }
             } else {
                 Toast.makeText(getActivity(), "User not found locally", Toast.LENGTH_SHORT).show();
+                navigateToLogin();
             }
         }
     }
@@ -268,24 +352,74 @@ public class ProfileFragment extends Fragment {
         if (resultCode == Activity.RESULT_OK) {
             if (requestCode == REQUEST_CAMERA && data != null) {
                 Bitmap imageBitmap = (Bitmap) data.getExtras().get("data");
+                Bitmap scaledBitmap = Bitmap.createScaledBitmap(imageBitmap, 500, 500, false);
+                profileImageView.setImageBitmap(scaledBitmap);
+                saveProfilePictureUri(scaledBitmap);
                 profileImageView.setImageBitmap(imageBitmap);
                 saveProfilePictureUri(imageBitmap);
             } else if (requestCode == REQUEST_GALLERY && data != null) {
                 Uri selectedImage = data.getData();
                 profileImageView.setImageURI(selectedImage);
                 prefs.edit().putString("PROFILE_PIC_URI", selectedImage.toString()).apply();
+
+                try {
+                    Bitmap imageBitmap = MediaStore.Images.Media.getBitmap(getActivity().getContentResolver(), selectedImage);
+                    saveProfilePictureToDatabase(imageBitmap);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         }
     }
 
-    private void saveProfilePictureUri(Bitmap bitmap) {
-        // Save bitmap to internal storage and get URI
-        String savedImageURI = MediaStore.Images.Media.insertImage(
-                getActivity().getContentResolver(),
-                bitmap,
-                "ProfilePicture",
-                "Profile picture"
-        );
-        prefs.edit().putString("PROFILE_PIC_URI", savedImageURI).apply();
+
+    private void saveProfilePictureToDatabase(Bitmap bitmap) {
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+
+        if (firebaseUser != null) {
+            byte[] profilePicBytes = bitmapToByteArray(bitmap);
+            String email = firebaseUser.getEmail();
+
+            if (dbHelper.updateProfilePicture(email, profilePicBytes)) {
+                Toast.makeText(getActivity(), "Profile picture saved", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(getActivity(), "Failed to save profile picture", Toast.LENGTH_SHORT).show();
+            }
+        }
     }
+
+
+    private void saveProfilePictureUri(Bitmap bitmap) {
+        // Get the current Firebase user
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+
+        if (firebaseUser != null) {
+            // Save bitmap to internal storage and get URI
+            String savedImageURI = MediaStore.Images.Media.insertImage(
+                    getActivity().getContentResolver(),
+                    bitmap,
+                    "ProfilePicture_" + firebaseUser.getUid(), // Use UID to differentiate
+                    "Profile picture for user " + firebaseUser.getUid()
+            );
+
+            // Save URI in SharedPreferences for this specific user
+            prefs.edit().putString("PROFILE_PIC_URI_" + firebaseUser.getUid(), savedImageURI).apply();
+        }
+
+
+    }
+
+
+    // Convert Bitmap to byte array
+    private byte[] bitmapToByteArray(Bitmap bitmap) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+        return stream.toByteArray();
+    }
+
+    // Convert byte array to Bitmap
+    private Bitmap byteArrayToBitmap(byte[] byteArray) {
+        return BitmapFactory.decodeByteArray(byteArray, 0, byteArray.length);
+    }
+
 }
