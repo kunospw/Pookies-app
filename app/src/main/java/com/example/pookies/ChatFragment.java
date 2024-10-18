@@ -119,11 +119,18 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
 
     private void loadChatHistory() {
         messageList.clear();
-        // Load only from Firebase
+
+        // Load messages from SQLite
+        List<Message> sqliteMessages = dbHelper.getAllMessages(userId);
+        if (sqliteMessages != null && !sqliteMessages.isEmpty()) {
+            messageList.addAll(sqliteMessages);
+        }
+
+        // Load messages from Firebase
         mDatabase.addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                messageList.clear();
+                // Clear Firebase messages and add to messageList
                 for (DataSnapshot messageSnapshot : dataSnapshot.getChildren()) {
                     Message message = messageSnapshot.getValue(Message.class);
                     if (message != null) {

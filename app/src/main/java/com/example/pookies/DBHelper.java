@@ -12,7 +12,7 @@ import java.util.List;
 public class DBHelper extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "pookies.db";
-    private static final int DATABASE_VERSION = 3;
+    private static final int DATABASE_VERSION = 4;
 
     // User table
     private static final String TABLE_USERS = "users";
@@ -20,6 +20,7 @@ public class DBHelper extends SQLiteOpenHelper {
     private static final String COL_USER_EMAIL = "email";
     private static final String COL_USER_NAME = "name";
     private static final String COL_USER_PASSWORD = "password";
+    private static final String COL_USER_PROFILEPICT = "profilepict";
 
     // Feedback table
     private static final String TABLE_FEEDBACK = "feedback";
@@ -49,7 +50,8 @@ public class DBHelper extends SQLiteOpenHelper {
                 + COL_USER_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + COL_USER_EMAIL + " TEXT,"
                 + COL_USER_NAME + " TEXT,"
-                + COL_USER_PASSWORD + " TEXT" + ")";
+                + COL_USER_PASSWORD + " TEXT,"
+                + COL_USER_PROFILEPICT + " BLOB" + ")";
         db.execSQL(CREATE_USERS_TABLE);
 
         // Create feedback table
@@ -74,6 +76,10 @@ public class DBHelper extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if (oldVersion < 4) {
+            // Add the profilepict column to the existing table
+            db.execSQL("ALTER TABLE " + TABLE_USERS + " ADD COLUMN " + COL_USER_PROFILEPICT + " BLOB");
+        }
         // Drop older tables if existed
         db.execSQL("DROP TABLE IF EXISTS " + TABLE_USERS);
         db.execSQL("DROP TABLE IF EXISTS " + TABLE_FEEDBACK);
@@ -114,12 +120,53 @@ public class DBHelper extends SQLiteOpenHelper {
         return result > 0;
     }
 
+    public void deleteUserMessages(String uid) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.delete(TABLE_MESSAGES, COL_MESSAGE_USER_ID + "=?", new String[]{uid});
+        db.close();
+    }
+
+
+    public int deleteUser(String userId) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        // Delete user's messages
+        db.delete(TABLE_MESSAGES, COL_MESSAGE_USER_ID + "=?", new String[]{userId});
+        // Delete user's feedback
+        db.delete(TABLE_FEEDBACK, COL_FEEDBACK_USER_ID + "=?", new String[]{userId});
+        // Delete user
+        return db.delete(TABLE_USERS, COL_USER_ID + "=?", new String[]{userId});
+    }
+
+
     public boolean updatePassword(String email, String newPassword) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues contentValues = new ContentValues();
         contentValues.put(COL_USER_PASSWORD, newPassword);
         int result = db.update(TABLE_USERS, contentValues, COL_USER_EMAIL + "=?", new String[]{email});
         return result > 0;
+    }
+
+    // Update user's profile picture
+    public boolean updateProfilePicture(String email, byte[] profilePic) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues contentValues = new ContentValues();
+        contentValues.put(COL_USER_PROFILEPICT, profilePic);
+        int result = db.update(TABLE_USERS, contentValues, COL_USER_EMAIL + "=?", new String[]{email});
+        return result > 0;
+    }
+
+    // Retrieve user's profile picture
+    public byte[] getProfilePictureByEmail(String email) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.query(TABLE_USERS, new String[]{COL_USER_PROFILEPICT},
+                COL_USER_EMAIL + "=?", new String[]{email}, null, null, null);
+
+        if (cursor != null && cursor.moveToFirst()) {
+            byte[] profilePic = cursor.getBlob(cursor.getColumnIndexOrThrow(COL_USER_PROFILEPICT));
+            cursor.close();
+            return profilePic;
+        }
+        return null; // Return null if no picture found
     }
 
     // Feedback-related methods

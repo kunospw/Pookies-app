@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
@@ -28,6 +29,9 @@ import com.google.firebase.auth.UserProfileChangeRequest;  // Ensure correct imp
 
 import static android.content.Context.MODE_PRIVATE;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
 public class ProfileFragment extends Fragment {
 
     private static final String PREFS_NAME = "APP_PREFS";
@@ -46,6 +50,14 @@ public class ProfileFragment extends Fragment {
     private SharedPreferences prefs;
 
     @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mAuth = FirebaseAuth.getInstance();
+        dbHelper = new DBHelper(requireContext());
+        prefs = requireContext().getSharedPreferences(PREFS_NAME, Activity.MODE_PRIVATE);
+    }
+
+    @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_profile, container, false);
 
@@ -56,6 +68,23 @@ public class ProfileFragment extends Fragment {
         return view;
     }
 
+    @Override
+    public void onStart() {
+        super.onStart();
+        // Check if user is signed in (non-null) and update UI accordingly.
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+        if(currentUser == null){
+            // User is not signed in, navigate to login activity
+            navigateToLogin();
+        }
+    }
+
+    private void navigateToLogin() {
+        // Replace this with your actual login activity
+        Intent intent = new Intent(getActivity(), LoginActivity.class);
+        startActivity(intent);
+        getActivity().finish();
+    }
     private void initializeViews(View view) {
         usernameEditText = view.findViewById(R.id.username);
         emailEditText = view.findViewById(R.id.email);
@@ -84,19 +113,34 @@ public class ProfileFragment extends Fragment {
             // User is logged in with Firebase
             emailEditText.setText(firebaseUser.getEmail());
             usernameEditText.setText(firebaseUser.getDisplayName());
+            loadProfilePictureFromDatabase(firebaseUser.getEmail());
         } else if (userID != null) {
             // User is logged in with SharedPreferences
             User currentUser = dbHelper.getUserByEmail(userID);
             if (currentUser != null) {
                 emailEditText.setText(currentUser.getEmail());
                 usernameEditText.setText(currentUser.getName());
+                loadProfilePictureFromDatabase(currentUser.getEmail());
+            }else {
+                // User not found in local database, navigate to login
+                navigateToLogin();
+                return;
             }
         }
 
-        passwordEditText.setText("********"); // Show 8 asterisks as a placeholder for password
+        passwordEditText.setText("****"); // Show 8 asterisks as a placeholder for password
         loadProfilePicture();
     }
 
+    private void loadProfilePictureFromDatabase(String email) {
+        byte[] profilePicBytes = dbHelper.getProfilePictureByEmail(email);
+        if (profilePicBytes != null) {
+            Bitmap profileBitmap = byteArrayToBitmap(profilePicBytes);
+            profileImageView.setImageBitmap(profileBitmap);
+        } else {
+            profileImageView.setImageResource(R.drawable.baseline_person_24);
+        }
+    }
     private void loadProfilePicture() {
         String profilePicUri = prefs.getString("PROFILE_PIC_URI", null);
         if (profilePicUri != null) {
@@ -219,6 +263,11 @@ public class ProfileFragment extends Fragment {
             firebaseUser.updateEmail(newEmail)
                     .addOnCompleteListener(task -> {
                         if (task.isSuccessful()) {
+                            // Update firebase user profile
+                            UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
+                                    .setDisplayName(newUsername)
+                                    .build();
+
                             // Update Firebase username
                             firebaseUser.updateProfile(new UserProfileChangeRequest.Builder()
                                             .setDisplayName(newUsername)
@@ -251,6 +300,7 @@ public class ProfileFragment extends Fragment {
                 }
             } else {
                 Toast.makeText(getActivity(), "User not found locally", Toast.LENGTH_SHORT).show();
+                navigateToLogin();
             }
         }
     }
@@ -274,7 +324,25 @@ public class ProfileFragment extends Fragment {
                 Uri selectedImage = data.getData();
                 profileImageView.setImageURI(selectedImage);
                 prefs.edit().putString("PROFILE_PIC_URI", selectedImage.toString()).apply();
+
+                try {
+                    Bitmap imageBitmap = MediaStore.Images.Media.getBitmap(getActivity().getContentResolver(), selectedImage);
+                    saveProfilePictureToDatabase(imageBitmap);
+                } catch (IOException e){
+                    e.printStackTrace();
+                }
             }
+        }
+    }
+
+    private void saveProfilePictureToDatabase(Bitmap bitmap) {
+        String email = emailEditText.getText().toString();
+        byte[] profilePicBytes = bitmapToByteArray(bitmap);
+
+        if (dbHelper.updateProfilePicture(email, profilePicBytes)) {
+            Toast.makeText(getActivity(), "Profile picture saved", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(getActivity(), "Failed to save profile picture", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -288,4 +356,17 @@ public class ProfileFragment extends Fragment {
         );
         prefs.edit().putString("PROFILE_PIC_URI", savedImageURI).apply();
     }
+
+    // Convert Bitmap to byte array
+    private byte[] bitmapToByteArray(Bitmap bitmap) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+        return stream.toByteArray();
+    }
+
+    // Convert byte array to Bitmap
+    private Bitmap byteArrayToBitmap(byte[] byteArray) {
+        return BitmapFactory.decodeByteArray(byteArray, 0, byteArray.length);
+    }
+
 }
