@@ -32,13 +32,6 @@ public class DBHelper extends SQLiteOpenHelper {
     private static final String COL_FEEDBACK_DESCRIPTION = "description";
     private static final String COL_FEEDBACK_TIME = "feedbackTime";
 
-    // Messages table
-    private static final String TABLE_MESSAGES = "messages";
-    private static final String COL_MESSAGE_ID = "id";
-    private static final String COL_MESSAGE_USER_ID = "userId";
-    private static final String COL_MESSAGE_TEXT = "message";
-    private static final String COL_MESSAGE_SENT_BY = "sentBy";
-
     public DBHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
     }
@@ -64,14 +57,6 @@ public class DBHelper extends SQLiteOpenHelper {
                 + COL_FEEDBACK_DESCRIPTION + " TEXT,"
                 + COL_FEEDBACK_TIME + " TEXT" + ")";
         db.execSQL(CREATE_FEEDBACK_TABLE);
-
-        // Create messages table
-        String CREATE_MESSAGES_TABLE = "CREATE TABLE " + TABLE_MESSAGES + "("
-                + COL_MESSAGE_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                + COL_MESSAGE_USER_ID + " TEXT,"
-                + COL_MESSAGE_TEXT + " TEXT,"
-                + COL_MESSAGE_SENT_BY + " TEXT" + ")";
-        db.execSQL(CREATE_MESSAGES_TABLE);
     }
 
     @Override
@@ -83,7 +68,6 @@ public class DBHelper extends SQLiteOpenHelper {
         // Drop older tables if existed
         db.execSQL("DROP TABLE IF EXISTS " + TABLE_USERS);
         db.execSQL("DROP TABLE IF EXISTS " + TABLE_FEEDBACK);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_MESSAGES);
         onCreate(db);
     }
 
@@ -120,21 +104,13 @@ public class DBHelper extends SQLiteOpenHelper {
         return result > 0;
     }
 
-    public void deleteUserMessages(String uid) {
+    // Add this method to update the user's email in the SQLite database
+    public boolean updateUserEmail(String oldEmail, String newEmail) {
         SQLiteDatabase db = this.getWritableDatabase();
-        db.delete(TABLE_MESSAGES, COL_MESSAGE_USER_ID + "=?", new String[]{uid});
-        db.close();
-    }
-
-
-    public int deleteUser(String userId) {
-        SQLiteDatabase db = this.getWritableDatabase();
-        // Delete user's messages
-        db.delete(TABLE_MESSAGES, COL_MESSAGE_USER_ID + "=?", new String[]{userId});
-        // Delete user's feedback
-        db.delete(TABLE_FEEDBACK, COL_FEEDBACK_USER_ID + "=?", new String[]{userId});
-        // Delete user
-        return db.delete(TABLE_USERS, COL_USER_ID + "=?", new String[]{userId});
+        ContentValues contentValues = new ContentValues();
+        contentValues.put(COL_USER_EMAIL, newEmail);
+        int result = db.update(TABLE_USERS, contentValues, COL_USER_EMAIL + "=?", new String[]{oldEmail});
+        return result > 0;
     }
 
 
@@ -227,31 +203,5 @@ public class DBHelper extends SQLiteOpenHelper {
     public int deleteFeedback(String userId, String feedbackTime) {
         SQLiteDatabase db = this.getWritableDatabase();
         return db.delete(TABLE_FEEDBACK, COL_FEEDBACK_USER_ID + "=? AND " + COL_FEEDBACK_TIME + "=?", new String[]{userId, feedbackTime});
-    }
-
-    // Messages-related methods
-    public void insertMessage(Message message, String userId) {
-        SQLiteDatabase db = this.getWritableDatabase();
-        ContentValues values = new ContentValues();
-        values.put(COL_MESSAGE_USER_ID, userId);
-        values.put(COL_MESSAGE_TEXT, message.getMessage());
-        values.put(COL_MESSAGE_SENT_BY, message.getSentBy());
-        db.insert(TABLE_MESSAGES, null, values);
-    }
-
-    public List<Message> getAllMessages(String userId) {
-        List<Message> messages = new ArrayList<>();
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.query(TABLE_MESSAGES, null, COL_MESSAGE_USER_ID + "=?",
-                new String[]{userId}, null, null, null);
-        if (cursor.moveToFirst()) {
-            do {
-                String message = cursor.getString(cursor.getColumnIndexOrThrow(COL_MESSAGE_TEXT));
-                String sentBy = cursor.getString(cursor.getColumnIndexOrThrow(COL_MESSAGE_SENT_BY));
-                messages.add(new Message(message, sentBy));
-            } while (cursor.moveToNext());
-        }
-        cursor.close();
-        return messages;
     }
 }
