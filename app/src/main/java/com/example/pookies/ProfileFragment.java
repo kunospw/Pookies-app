@@ -2,6 +2,8 @@ package com.example.pookies;
 
 import static android.content.Context.MODE_PRIVATE;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
@@ -10,6 +12,8 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.Drawable;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
@@ -48,6 +52,7 @@ public class ProfileFragment extends Fragment {
 
     private static final int REQUEST_CAMERA = 100;
     private static final int REQUEST_GALLERY = 101;
+    private static final int CAMERA_PERMISSION_CODE = 102;
     private static final String PREFS_NAME = "APP_PREFS";
     private static final String USER_ID_KEY = "USER_ID";
 
@@ -133,7 +138,7 @@ public class ProfileFragment extends Fragment {
             return;
         }
 
-        passwordEditText.setText("****");
+        passwordEditText.setText("********");
     }
 
     private void loadProfilePicture(String uid, String email) {
@@ -176,9 +181,18 @@ public class ProfileFragment extends Fragment {
     }
 
     private void openCamera() {
-        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        startActivityForResult(intent, REQUEST_CAMERA);
+        if (ContextCompat.checkSelfPermission(getActivity(), Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(getActivity(),
+                    new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_CODE);
+        } else {
+            Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            startActivityForResult(intent, REQUEST_CAMERA);
+        }
     }
+
+
+
 
     private void openGallery() {
         Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
@@ -571,10 +585,17 @@ public class ProfileFragment extends Fragment {
         }
     }
 
+
+
     // Convert Bitmap to byte array
     private byte[] bitmapToByteArray(Bitmap bitmap) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
         return stream.toByteArray();
+    }
+
+    // Convert byte array to Bitmap
+    private Bitmap byteArrayToBitmap(byte[] byteArray) {
+        return BitmapFactory.decodeByteArray(byteArray, 0, byteArray.length);
     }
 }
