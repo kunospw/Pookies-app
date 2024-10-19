@@ -7,7 +7,7 @@
     android:layout_height="match_parent"
     android:background="#ffd1c7"
     tools:context=".MainActivity">
-    
+
     <androidx.recyclerview.widget.RecyclerView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -27,6 +27,7 @@
             android:layout_centerInParent="true"
             android:hint="Write here"
             android:padding="16dp"
+            android:textColor="@color/black"
             android:layout_toLeftOf="@+id/send_btn"
             android:background="@drawable/rounded_edittext"/>
         <ImageButton

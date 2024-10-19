@@ -1,7 +1,6 @@
 package com.example.pookies;
 
 import android.app.AlertDialog;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -16,18 +15,14 @@ import androidx.fragment.app.Fragment;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ValueEventListener;
 
 public class SettingsFragment extends Fragment {
 
     private Button btnDeleteChat, btnDeleteAccount;
     private FirebaseAuth mAuth;
     private DatabaseReference mDatabase;
-    private DBHelper dbHelper;
 
     @Nullable
     @Override
@@ -39,7 +34,6 @@ public class SettingsFragment extends Fragment {
         if (currentUser != null) {
             mDatabase = FirebaseDatabase.getInstance().getReference("users").child(currentUser.getUid());
         }
-        dbHelper = new DBHelper(getContext());
 
         btnDeleteChat = view.findViewById(R.id.btnDeleteChat);
         btnDeleteAccount = view.findViewById(R.id.btnDeleteAccount);
@@ -63,28 +57,13 @@ public class SettingsFragment extends Fragment {
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser != null) {
             // Delete user's chat history from Firebase
-            mDatabase.child("messages").orderByChild("senderUid").equalTo(currentUser.getUid())
-                    .addListenerForSingleValueEvent(new ValueEventListener() {
-                        @Override
-                        public void onDataChange(DataSnapshot dataSnapshot) {
-                            for (DataSnapshot snapshot : dataSnapshot.getChildren()) {
-                                snapshot.getRef().removeValue();
-                            }
-
-                            // Delete user's chat history from SQLite
-                            dbHelper.deleteUserMessages(currentUser.getUid());
-                            Toast.makeText(getContext(), "Chat history deleted successfully", Toast.LENGTH_SHORT).show();
-                        }
-
-                        @Override
-                        public void onCancelled(DatabaseError databaseError) {
-                            Toast.makeText(getContext(), "Failed to delete chat history", Toast.LENGTH_SHORT).show();
-                        }
-                    });
+            mDatabase.child("messages").removeValue()
+                    .addOnSuccessListener(aVoid -> {
+                        Toast.makeText(getContext(), "Chat history deleted successfully", Toast.LENGTH_SHORT).show();
+                    })
+                    .addOnFailureListener(e -> Toast.makeText(getContext(), "Failed to delete chat history", Toast.LENGTH_SHORT).show());
         }
     }
-
-
 
     private void showDeleteAccountConfirmationDialog() {
         new AlertDialog.Builder(getContext())
@@ -98,6 +77,7 @@ public class SettingsFragment extends Fragment {
     private void deleteUserAccount() {
         FirebaseUser user = mAuth.getCurrentUser();
         if (user != null) {
+            String userId = user.getUid();
             // Delete user data from Firebase
             mDatabase.removeValue()
                     .addOnSuccessListener(aVoid -> {
@@ -105,8 +85,6 @@ public class SettingsFragment extends Fragment {
                         user.delete()
                                 .addOnCompleteListener(task -> {
                                     if (task.isSuccessful()) {
-                                        // Delete user data from SQLite
-                                        dbHelper.deleteUser(user.getUid());
                                         Toast.makeText(getContext(), "Account deleted successfully", Toast.LENGTH_SHORT).show();
                                         // Navigate to login screen after account deletion
                                         navigateToLogin();
@@ -122,6 +100,7 @@ public class SettingsFragment extends Fragment {
     private void navigateToLogin() {
         // Redirect to the login activity
         Intent intent = new Intent(getActivity(), LoginActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         if (getActivity() != null) {
             getActivity().finish();  // Close the current activity

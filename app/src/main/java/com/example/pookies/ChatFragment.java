@@ -44,12 +44,12 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     MessageAdapter messageAdapter;
     FirebaseAuth mAuth;
     String userId;
-    DBHelper dbHelper;
     MessagingService messagingService;
     boolean isBound = false;
     public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     OkHttpClient client = new OkHttpClient();
     DatabaseReference mDatabase;
+    ValueEventListener valueEventListener;
 
     private ServiceConnection connection = new ServiceConnection() {
         @Override
@@ -76,7 +76,6 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
             userId = user.getUid();
             mDatabase = FirebaseDatabase.getInstance().getReference("users").child(userId).child("messages");
         }
-        dbHelper = new DBHelper(getContext());
         Intent intent = new Intent(getContext(), MessagingService.class);
         getActivity().bindService(intent, connection, Context.BIND_AUTO_CREATE);
     }
@@ -115,22 +114,17 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
             getActivity().unbindService(connection);
             isBound = false;
         }
+        if (valueEventListener != null && mDatabase != null) {
+            mDatabase.removeEventListener(valueEventListener);
+        }
     }
 
     private void loadChatHistory() {
         messageList.clear();
-
-        // Load messages from SQLite
-        List<Message> sqliteMessages = dbHelper.getAllMessages(userId);
-        if (sqliteMessages != null && !sqliteMessages.isEmpty()) {
-            messageList.addAll(sqliteMessages);
-        }
-
-        // Load messages from Firebase
-        mDatabase.addValueEventListener(new ValueEventListener() {
+        valueEventListener = new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                // Clear Firebase messages and add to messageList
+                messageList.clear();
                 for (DataSnapshot messageSnapshot : dataSnapshot.getChildren()) {
                     Message message = messageSnapshot.getValue(Message.class);
                     if (message != null) {
@@ -145,16 +139,15 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
             public void onCancelled(@NonNull DatabaseError databaseError) {
                 // Handle possible errors
             }
-        });
+        };
+        mDatabase.addValueEventListener(valueEventListener);
     }
+
 
     void addToChat(String message, String sentBy) {
         if (getActivity() != null) {
             getActivity().runOnUiThread(() -> {
                 Message newMessage = new Message(message, sentBy);
-
-                // Save message to SQLite
-                dbHelper.insertMessage(newMessage, userId);
 
                 // Save message to Firebase
                 String messageId = mDatabase.push().getKey();
@@ -162,14 +155,11 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
                     mDatabase.child(messageId).setValue(newMessage);
                 }
 
-                // Send message through MessagingService
-                if (isBound) {
-                    messagingService.sendMessage(newMessage);
-                }
+                // Note: We don't need to add the message to the local list or notify the adapter
+                // The ValueEventListener will handle updating the UI
             });
         }
     }
-
 
     void addResponse(String response) {
         addToChat(response, Message.SENT_BY_BOT);
@@ -238,11 +228,7 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     public void onNewMessage(Message message) {
         if (getActivity() != null) {
             getActivity().runOnUiThread(() -> {
-                // Save the new message to SQLite
-                dbHelper.insertMessage(message, userId);
-
-                // Note: We don't add the message to the messageList or update the UI here
-                // because the ValueEventListener in loadChatHistory will handle that
+                // The new message will be added to the list by the ValueEventListener in loadChatHistory
             });
         }
     }
