@@ -44,7 +44,7 @@ public class DBHelper extends SQLiteOpenHelper {
                 + COL_USER_EMAIL + " TEXT,"
                 + COL_USER_NAME + " TEXT,"
                 + COL_USER_PASSWORD + " TEXT,"
-                + COL_USER_PROFILEPICT + " BLOB" + ")";
+                + COL_USER_PROFILEPICT + " BLOB" +")";
         db.execSQL(CREATE_USERS_TABLE);
 
         // Create feedback table
@@ -61,6 +61,7 @@ public class DBHelper extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        // Drop older tables if existed
         if (oldVersion < 4) {
             // Add the profilepict column to the existing table
             db.execSQL("ALTER TABLE " + TABLE_USERS + " ADD COLUMN " + COL_USER_PROFILEPICT + " BLOB");
@@ -106,14 +107,20 @@ public class DBHelper extends SQLiteOpenHelper {
 
     // Add this method to update the user's email in the SQLite database
     public boolean updateUserEmail(String oldEmail, String newEmail) {
+    public void deleteUserMessages(String uid) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.delete(TABLE_MESSAGES, COL_MESSAGE_USER_ID + "=?", new String[]{uid});
+        db.close();
+    }
+
+
+    public int deleteUser(String userId) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues contentValues = new ContentValues();
         contentValues.put(COL_USER_EMAIL, newEmail);
         int result = db.update(TABLE_USERS, contentValues, COL_USER_EMAIL + "=?", new String[]{oldEmail});
         return result > 0;
     }
-
-
     public boolean updatePassword(String email, String newPassword) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues contentValues = new ContentValues();
@@ -144,6 +151,7 @@ public class DBHelper extends SQLiteOpenHelper {
         }
         return null; // Return null if no picture found
     }
+
 
     // Feedback-related methods
 

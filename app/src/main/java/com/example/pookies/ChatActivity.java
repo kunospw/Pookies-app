@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -106,6 +107,23 @@ public class ChatActivity extends AppCompatActivity {
         textEmail = headerView.findViewById(R.id.textEmail);
 
         buttonDrawerToggle.setOnClickListener(v -> drawerLayout.open());
+        loadProfilePicture();
+    }
+    private void loadProfilePicture() {
+        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SharedPreferences prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);
+            String profilePicUri = prefs.getString("PROFILE_PIC_URI_" + currentUser.getUid(), null);
+            if (profilePicUri != null) {
+                // Load the image from URI
+                userImage.setImageURI(Uri.parse(profilePicUri));
+            } else {
+                // Set a default profile image if no URI is found
+                userImage.setImageResource(R.drawable.person); // Default image resource
+            }
+        } else {
+            userImage.setImageResource(R.drawable.person); // Default image if user is not logged in
+        }
     }
 
     public void updateDrawerHeader() {
@@ -223,6 +241,8 @@ public class ChatActivity extends AppCompatActivity {
             } else if (itemId == R.id.navLogout) {
                 logOutUser();
                 return true;
+            } else if (itemId == R.id.navlocation) {
+                selectedFragment = new GPSFragment();
             }
 
             if (selectedFragment != null) {
