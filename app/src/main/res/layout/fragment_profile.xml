@@ -80,7 +80,6 @@
         android:textColorLink="#FFD1C7"
         app:rippleColor="#FFD1C7" />
 
-
     <Button
         android:id="@+id/forgotPasswordButton"
         android:layout_width="200dp"

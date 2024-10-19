@@ -4,26 +4,40 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.view.MenuItem;
+import android.util.Log;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.DataSource;
+import com.bumptech.glide.load.engine.GlideException;
+import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.RequestOptions;
+import com.bumptech.glide.request.target.Target;
+import com.bumptech.glide.signature.ObjectKey;
 import com.google.android.material.navigation.NavigationView;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
 
 public class ChatActivity extends AppCompatActivity {
+    private static final int PROFILE_UPDATE_REQUEST = 1001;
+    private static final String TAG = "ChatActivity";
 
     DrawerLayout drawerLayout;
     ImageButton buttonDrawerToggle;
@@ -31,6 +45,8 @@ public class ChatActivity extends AppCompatActivity {
     ImageView userImage;
     TextView textUsername, textEmail;
     DBHelper dbHelper;
+    FirebaseStorage storage;
+    StorageReference storageRef;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -39,62 +55,42 @@ public class ChatActivity extends AppCompatActivity {
         checkBluetoothPermission();
 
         dbHelper = new DBHelper(this);
+        storage = FirebaseStorage.getInstance();
+        storageRef = storage.getReference();
 
         FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
         if (currentUser != null) {
             String firebaseUserID = currentUser.getUid();
             String email = currentUser.getEmail();
 
-            // Save userID to SharedPreferences
             SharedPreferences prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);
             SharedPreferences.Editor editor = prefs.edit();
             editor.putString("USER_ID", firebaseUserID);
             editor.apply();
 
-            // Retrieve user data from SQLite
             User localUser = dbHelper.getUserByEmail(email);
             if (localUser == null) {
-                // If user doesn't exist in SQLite, create a new entry
                 String displayName = currentUser.getDisplayName();
-                dbHelper.insertUser(email, displayName, ""); // Password field left empty as it's managed by Firebase
+                dbHelper.insertUser(email, displayName, ""); // Password left empty as managed by Firebase
                 localUser = dbHelper.getUserByEmail(email);
             }
 
-            // Initialize UI components
             initializeUI();
+            updateDrawerHeader();
 
-            // Set user data in the navigation header
-            if (localUser != null) {
-                textUsername.setText(localUser.getName());
-                textEmail.setText(localUser.getEmail());
-                Toast.makeText(this, "Welcome, " + localUser.getName(), Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, "Welcome, User", Toast.LENGTH_SHORT).show();
-            }
-
-            // Set click listeners for userImage and textUsername to open ProfileFragment
-            userImage.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    loadProfileFragment();
-                }
-            });
-
-            textUsername.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    loadProfileFragment();
-                }
-            });
+            View.OnClickListener profileClickListener = view -> {
+                loadProfileFragment();  // Load the ProfileFragment
+                drawerLayout.close();   // Close the drawer
+            };
+            userImage.setOnClickListener(profileClickListener);
+            textUsername.setOnClickListener(profileClickListener);
 
         } else {
-            // No Firebase user is logged in, redirect to LoginActivity
             redirectToLogin();
         }
 
         setupNavigationDrawer();
 
-        // Load default fragment (ChatFragment)
         if (savedInstanceState == null) {
             loadFragment(new ChatFragment());
         }
@@ -128,6 +124,101 @@ public class ChatActivity extends AppCompatActivity {
         } else {
             userImage.setImageResource(R.drawable.person); // Default image if user is not logged in
         }
+    }
+
+    public void updateDrawerHeader() {
+        Log.d(TAG, "updateDrawerHeader: Updating drawer header");
+        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            String email = currentUser.getEmail();
+            User localUser = dbHelper.getUserByEmail(email);
+            if (localUser != null) {
+                textUsername.setText(localUser.getName());
+                textEmail.setText(localUser.getEmail());
+
+                // Load profile picture
+                loadProfilePicture(currentUser.getUid(), email);
+            } else {
+                Log.e(TAG, "updateDrawerHeader: Local user is null for email: " + email);
+            }
+        } else {
+            Log.e(TAG, "updateDrawerHeader: Current Firebase user is null");
+        }
+    }
+    private void loadProfilePicture(String uid, String email) {
+        if (uid != null) {
+            loadProfilePictureFromFirebase(uid);
+        } else {
+            userImage.setImageResource(R.drawable.baseline_person_24);
+        }
+    }
+
+    private void loadProfilePictureFromFirebase(String uid) {
+        StorageReference profilePicRef = storageRef.child("profile_pictures").child(uid).child("profile.jpg");
+        profilePicRef.getDownloadUrl().addOnSuccessListener(uri -> {
+            Glide.with(this)
+                    .load(uri)
+                    .apply(RequestOptions.circleCropTransform())
+                    .signature(new ObjectKey(System.currentTimeMillis())) // Add a unique signature to force refresh
+                    .placeholder(R.drawable.baseline_person_24)
+                    .error(R.drawable.baseline_person_24)
+                    .listener(new RequestListener<Drawable>() {
+                        @Override
+                        public boolean onLoadFailed(@Nullable GlideException e, Object model, Target<Drawable> target, boolean isFirstResource) {
+                            Log.e(TAG, "onLoadFailed: Failed to load image with Glide", e);
+                            return false;
+                        }
+
+                        @Override
+                        public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
+                            Log.d(TAG, "onResourceReady: Image loaded successfully with Glide");
+                            return false;
+                        }
+                    })
+                    .into(userImage);
+        }).addOnFailureListener(e -> {
+            Log.e(TAG, "loadProfilePictureFromFirebase: Failed to get download URL", e);
+            userImage.setImageResource(R.drawable.baseline_person_24);
+        });
+    }
+
+    private void loadImageWithGlide(Object imageSource) {
+        Glide.with(this)
+                .load(imageSource)
+                .apply(RequestOptions.circleCropTransform())
+                .signature(new ObjectKey(System.currentTimeMillis())) // Add a unique signature to force refresh
+                .placeholder(R.drawable.baseline_person_24)
+                .error(R.drawable.baseline_person_24)
+                .listener(new RequestListener<Drawable>() {
+                    @Override
+                    public boolean onLoadFailed(@Nullable GlideException e, Object model, Target<Drawable> target, boolean isFirstResource) {
+                        Log.e(TAG, "onLoadFailed: Failed to load image with Glide", e);
+                        return false;
+                    }
+
+                    @Override
+                    public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
+                        Log.d(TAG, "onResourceReady: Image loaded successfully with Glide");
+                        return false;
+                    }
+                })
+                .into(userImage);
+    }
+
+
+    public void refreshHeader() {
+        Log.d(TAG, "refreshHeader: Refreshing header");
+        runOnUiThread(() -> {
+            updateDrawerHeader();
+            // Force Glide to reload the image
+            if (userImage != null) {
+                FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+                if (currentUser != null) {
+                    Glide.with(ChatActivity.this).clear(userImage);
+                    loadProfilePicture(currentUser.getUid(), currentUser.getEmail());
+                }
+            }
+        });
     }
 
     private void setupNavigationDrawer() {
@@ -170,8 +261,8 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void loadProfileFragment() {
-        loadFragment(new ProfileFragment());
-        drawerLayout.close();
+        ProfileFragment profileFragment = new ProfileFragment();
+        loadFragment(profileFragment);
     }
 
     private void logOutUser() {
@@ -187,6 +278,7 @@ public class ChatActivity extends AppCompatActivity {
         startActivity(intent);
         finish();
     }
+
     private void checkBluetoothPermission() {
         if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED ||
                 ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED ||
@@ -199,4 +291,11 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PROFILE_UPDATE_REQUEST && resultCode == RESULT_OK) {
+            updateDrawerHeader();
+        }
+    }
 }
