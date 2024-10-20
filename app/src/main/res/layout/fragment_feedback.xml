@@ -145,4 +145,5 @@
             android:textStyle="bold"
             android:layout_marginBottom="40dp"/>
     </LinearLayout>
+
 </FrameLayout>

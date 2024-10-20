@@ -35,7 +35,7 @@ public class GPSFragment extends Fragment {
 
         latitude = view.findViewById(R.id.Latitude);
         longitude = view.findViewById(R.id.Longitude);
-        location = view.findViewById(R.id.location);
+        location = view.findViewById(R.id.Location);
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
 
