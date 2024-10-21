@@ -30,7 +30,7 @@ public class GPS  extends AppCompatActivity {
 
         latitude = findViewById(R.id.Latitude);
         longitude = findViewById(R.id.Longitude);
-        location = findViewById(R.id.location);
+        location = findViewById(R.id.Location);
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 

@@ -5,97 +5,119 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/background_blue"
+    android:background="@drawable/main_bcg"
     tools:context=".MainActivity">
 
-    <ImageView
-        android:id="@+id/logopink"
-        android:layout_width="250dp"
-        android:layout_height="250dp"
-        android:layout_marginBottom="140dp"
-        android:src="@drawable/pink_logo"
-        app:layout_constraintBottom_toTopOf="@+id/linearLayout"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.49"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <TextView
-        android:id="@+id/wcText2"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="-10dp"
-        android:fontFamily="@font/montserrat"
-        android:text="to Pookies!"
-        android:textColor="#ffff"
-        android:textSize="45sp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.505"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/wcText"
-        app:layout_constraintVertical_bias="0.0" />
-
-    <TextView
-        android:id="@+id/wcText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="28dp"
-        android:fontFamily="@font/montserrat_bold"
-        android:text="Welcome"
-        android:textColor="#ffff"
-        android:textSize="45sp"
-        android:textStyle="bold"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.217"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/logopink" />
 
     <LinearLayout
-        android:id="@+id/linearLayout"
-        android:layout_width="349dp"
-        android:layout_height="240dp"
-        android:layout_marginBottom="15dp"
+        android:layout_width="409dp"
+        android:layout_height="844dp"
+        android:layout_marginStart="1dp"
+        android:layout_marginTop="1dp"
+        android:layout_marginEnd="1dp"
+        android:layout_marginBottom="1dp"
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
-        <Button
-            android:id="@+id/lgBtn"
-            android:layout_width="300dp"
-            android:layout_height="50dp"
-            android:layout_gravity="center"
-            android:layout_marginTop="20dp"
-            android:background="@drawable/bg_outline"
-            android:fontFamily="@font/montserrat_medium"
-            android:text="I  have an Account"
-            android:textStyle="bold"
-            android:textColor="@color/blue_dark"
-            android:textSize="20sp"
-            />
-
-        <Button
-            android:id="@+id/rgBtn"
-            android:layout_width="300dp"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:layout_marginTop="10dp"
-            android:backgroundTint="@color/salmon"
-
-            android:fontFamily="@font/montserrat_medium"
-            android:text="I don't have an Account"
-            android:textColor="@color/blue_dark"
-            android:textSize="17sp"
-            android:textStyle="bold"
-            app:cornerRadius="0dp" />
 
         <TextView
-            android:id="@+id/textView"
+            android:id="@+id/wcText"
+            android:layout_width="290dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="60dp"
+            android:layout_marginLeft="20dp"
+            android:fontFamily="@font/montserrat_medium"
+            android:text="Welcome to"
+            android:textColor="#ffff"
+            android:textSize="45sp"/>
+
+        <TextView
+            android:id="@+id/wcText2"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:layout_marginLeft="20dp"
+            android:fontFamily="@font/montserrat_bold"
+            android:text="Pookies!"
+            android:textColor="#ffff"
+            android:textSize="45sp" />
+
+        <ImageView
+            android:id="@+id/logopink"
+            android:layout_width="250dp"
+            android:layout_height="250dp"
+            android:src="@drawable/pink_logo"
+            android:layout_gravity="center"/>
+
+        <TextView
+            android:id="@+id/wcText3"
+            android:layout_width="280dp"
+            android:layout_height="wrap_content"
+            android:textAlignment="center"
+            android:layout_marginTop="10dp"
+            android:fontFamily="@font/montserrat_bold"
+            android:textStyle="bold"
             android:layout_gravity="center"
-            android:layout_marginTop="40dp"
-            android:text="Created by Pookies On Prayer™"
-            android:textColor="@color/white" />
+            android:text="Your new buddy, always by your side!"
+            android:textColor="#ffff"
+            android:textSize="20sp" />
+
+        <LinearLayout
+            android:id="@+id/linearLayout"
+            android:layout_width="349dp"
+            android:layout_height="240dp"
+            android:layout_marginTop="100dp"
+            android:layout_marginBottom="15dp"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/lgBtn"
+                android:layout_width="300dp"
+                android:layout_height="50dp"
+                android:layout_gravity="center"
+                android:layout_marginTop="20dp"
+                app:backgroundTint="#0909af"
+                app:cornerRadius="40dp"
+                app:strokeColor="@color/white"
+                android:elevation="@dimen/cardview_compat_inset_shadow"
+                app:strokeWidth="1dp"
+                android:fontFamily="@font/montserrat_medium"
+                android:text="I have an Account"
+                android:textStyle="bold"
+                android:textColor="@color/salmon"
+                android:textSize="20sp"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/rgBtn"
+                android:layout_width="300dp"
+                android:layout_height="50dp"
+                android:layout_gravity="center"
+                android:layout_marginTop="5dp"
+                app:backgroundTint="#0909af"
+                app:cornerRadius="40dp"
+                app:strokeColor="@color/white"
+                app:strokeWidth="1dp"
+                android:fontFamily="@font/montserrat_medium"
+                android:text="I don't have an Account"
+                android:textStyle="bold"
+                android:textColor="@color/white"
+                android:textSize="20sp"/>
+
+            <TextView
+                android:id="@+id/textView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginTop="40dp"
+                android:text="Created by Pookies On Prayer™"
+                android:textColor="@color/blue_dark" />
+        </LinearLayout>
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

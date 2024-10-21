@@ -27,14 +27,14 @@
           android:icon="@drawable/bluetooth"
           android:id="@+id/navBluetooth"
           android:title="Bluetooth" />
+      <item
+          android:icon="@drawable/baseline_location_pin_black"
+          android:id="@+id/navlocation"
+          android:title="GPS" />
    </group>
    <item
        android:icon="@drawable/logout"
        android:id="@+id/navLogout"
        android:title="Logout"/>
-   <item
-       android:icon="@drawable/bluetooth"
-       android:id="@+id/navlocation"
-       android:title="Psst.." />
 
 </menu>
