@@ -7,12 +7,16 @@
 
 
     <LinearLayout
-        android:layout_width="324dp"
-        android:layout_height="248dp"
+        android:layout_width="326dp"
+        android:layout_height="368dp"
+        android:layout_below="@+id/linearLayout3"
+        android:layout_alignParentStart="true"
         android:layout_alignParentEnd="true"
         android:layout_alignParentBottom="true"
-        android:layout_marginEnd="38dp"
-        android:layout_marginBottom="240dp"
+        android:layout_marginStart="53dp"
+        android:layout_marginTop="68dp"
+        android:layout_marginEnd="32dp"
+        android:layout_marginBottom="185dp"
         android:background="@drawable/feedback_bcg"
         android:elevation="20dp"
         android:orientation="vertical">
@@ -21,6 +25,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
+            android:layout_marginTop="40dp"
             android:layout_marginBottom="24dp"
             android:text="Settings"
             android:textColor="@color/blue_dark"
@@ -34,7 +39,7 @@
             android:layout_gravity="center"
             android:layout_marginTop="16dp"
             android:backgroundTint="@color/blue_dark"
-            android:elevation="30sp"
+            android:elevation="20sp"
             android:text="Delete Chat"
             android:textColor="#FFFFFF"
             android:textStyle="bold" />
@@ -52,15 +57,17 @@
             android:textColor="#FFFFFF"
             android:textStyle="bold" />
     </LinearLayout>
+
     <LinearLayout
+        android:id="@+id/linearLayout3"
         android:layout_width="142dp"
         android:layout_height="130dp"
         android:layout_alignParentTop="true"
         android:layout_alignParentEnd="true"
         android:layout_marginTop="96dp"
         android:layout_marginEnd="124dp"
-        android:elevation="30sp"
         android:background="@drawable/location"
+        android:elevation="30sp"
         android:orientation="vertical">
 
 

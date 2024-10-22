@@ -1,14 +1,70 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".PolicyFragment">
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:background="@drawable/chat_bcg">
 
-    <!-- TODO: Update blank fragment layout -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:text="@string/hello_blank_fragment" />
 
-</FrameLayout>
+    <LinearLayout
+        android:layout_width="361dp"
+        android:layout_height="401dp"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentBottom="true"
+        android:layout_marginStart="23dp"
+        android:layout_marginTop="180dp"
+        android:layout_marginEnd="27dp"
+        android:layout_marginBottom="149dp"
+        android:background="@drawable/feedback_bcg"
+        android:elevation="30dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/About"
+            android:textSize="40dp"
+            android:layout_marginTop="40dp"
+            android:layout_marginLeft="20sp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/blue_dark"
+            android:fontFamily="@font/montserrat_bold"
+            android:textStyle="bold"
+            android:text="About" />
+
+        <TextView
+            android:id="@+id/pookiesby"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="10sp"
+            android:layout_marginTop="20dp"
+            android:fontFamily="@font/montserrat_medium"
+            android:text="Pookies is made by: "
+            android:textSize="20sp"
+            android:textColor="@color/black"
+            android:textStyle="bold"/>
+
+        <LinearLayout
+            android:orientation="vertical"
+            android:layout_width="wrap_content"
+            android:layout_gravity="center"
+            android:layout_height="wrap_content">
+
+            <TextView
+                android:id="@+id/Members"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="10sp"
+                android:layout_marginTop="20dp"
+                android:fontFamily="@font/montserrat"
+                android:text="Angelica Suti Whiharto (001202300195)\nIntan Kumala Pasya (001202300063)\nDyah Puspo Rini (001202300036)\nNajla Aliya Syauqina (001202300036)"
+                android:textAlignment="textStart"
+                android:textColor="@color/black"
+                android:textSize="16dp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+</RelativeLayout>
