@@ -62,7 +62,6 @@ public class ProfileFragment extends Fragment {
     private Button editProfileButton, forgotPasswordButton;
 
     private FirebaseAuth mAuth;
-    private DBHelper dbHelper;
     private SharedPreferences prefs;
     private FirebaseStorage storage;
     private StorageReference storageRef;
@@ -71,7 +70,6 @@ public class ProfileFragment extends Fragment {
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mAuth = FirebaseAuth.getInstance();
-        dbHelper = new DBHelper(requireContext());
         prefs = requireContext().getSharedPreferences("APP_PREFS", Context.MODE_PRIVATE);
         storage = FirebaseStorage.getInstance();
         storageRef = storage.getReference();
@@ -103,10 +101,6 @@ public class ProfileFragment extends Fragment {
         floatingActionButton = view.findViewById(R.id.floatingActionButton);
         editProfileButton = view.findViewById(R.id.editProfileButton);
         forgotPasswordButton = view.findViewById(R.id.forgotPasswordButton);
-
-        mAuth = FirebaseAuth.getInstance();
-        dbHelper = new DBHelper(getActivity());
-        prefs = getActivity().getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
     }
 
     private void setupListeners() {
@@ -117,52 +111,29 @@ public class ProfileFragment extends Fragment {
 
     private void loadUserData() {
         FirebaseUser firebaseUser = mAuth.getCurrentUser();
-        String userID = prefs.getString(USER_ID_KEY, null);
-
         if (firebaseUser != null) {
             emailEditText.setText(firebaseUser.getEmail());
             usernameEditText.setText(firebaseUser.getDisplayName());
-            loadProfilePicture(firebaseUser.getUid(), firebaseUser.getEmail());
-        } else if (userID != null) {
-            User currentUser = dbHelper.getUserByEmail(userID);
-            if (currentUser != null) {
-                emailEditText.setText(currentUser.getEmail());
-                usernameEditText.setText(currentUser.getName());
-                loadProfilePicture(null, currentUser.getEmail());
-            } else {
-                navigateToLogin();
-                return;
-            }
+            loadProfilePicture(firebaseUser.getUid());
+            passwordEditText.setText("********");
         } else {
             navigateToLogin();
-            return;
-        }
-
-        passwordEditText.setText("********");
-    }
-
-    private void loadProfilePicture(String uid, String email) {
-        if (uid != null) {
-            loadProfilePictureFromFirebase(uid);
-        } else {
-            profileImageView.setImageResource(R.drawable.baseline_person_24);
         }
     }
 
-    private void loadProfilePictureFromFirebase(String uid) {
+    private void loadProfilePicture(String uid) {
         StorageReference profilePicRef = storageRef.child("profile_pictures").child(uid).child("profile.jpg");
         profilePicRef.getDownloadUrl().addOnSuccessListener(uri -> {
             Glide.with(this)
                     .load(uri)
                     .placeholder(R.drawable.baseline_person_24)
                     .error(R.drawable.baseline_person_24)
-                    .signature(new ObjectKey(System.currentTimeMillis())) // Force refresh
+                    .signature(new ObjectKey(System.currentTimeMillis()))
                     .into(profileImageView);
         }).addOnFailureListener(e -> {
             profileImageView.setImageResource(R.drawable.baseline_person_24);
         });
     }
-
 
     private void showImagePickerDialog() {
         CharSequence[] options = {"Take Photo", "Choose from Gallery", "Remove Profile Picture"};
@@ -190,8 +161,6 @@ public class ProfileFragment extends Fragment {
             startActivityForResult(intent, REQUEST_CAMERA);
         }
     }
-
-
 
 
     private void openGallery() {
@@ -281,9 +250,7 @@ public class ProfileFragment extends Fragment {
 
     private void changePassword(String currentPassword, String newPassword, AlertDialog dialog) {
         FirebaseUser firebaseUser = mAuth.getCurrentUser();
-
         if (firebaseUser != null) {
-            // Change password for Firebase user
             firebaseUser.reauthenticate(EmailAuthProvider.getCredential(firebaseUser.getEmail(), currentPassword))
                     .addOnCompleteListener(task -> {
                         if (task.isSuccessful()) {
@@ -300,20 +267,6 @@ public class ProfileFragment extends Fragment {
                             Toast.makeText(getActivity(), "Authentication failed", Toast.LENGTH_SHORT).show();
                         }
                     });
-        } else {
-            // Change password for SQLite user
-            String email = emailEditText.getText().toString().trim();
-            User currentUser = dbHelper.getUserByEmail(email);
-            if (currentUser != null && currentUser.getPassword().equals(currentPassword)) {
-                if (dbHelper.updatePassword(email, newPassword)) {
-                    Toast.makeText(getActivity(), "Password updated successfully", Toast.LENGTH_SHORT).show();
-                    dialog.dismiss();
-                } else {
-                    Toast.makeText(getActivity(), "Failed to update password", Toast.LENGTH_SHORT).show();
-                }
-            } else {
-                Toast.makeText(getActivity(), "Authentication failed", Toast.LENGTH_SHORT).show();
-            }
         }
     }
 
@@ -346,7 +299,6 @@ public class ProfileFragment extends Fragment {
 
     private void updateUsername(String newUsername) {
         FirebaseUser firebaseUser = mAuth.getCurrentUser();
-
         if (firebaseUser != null) {
             UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
                     .setDisplayName(newUsername)
@@ -355,31 +307,15 @@ public class ProfileFragment extends Fragment {
             firebaseUser.updateProfile(profileUpdates)
                     .addOnCompleteListener(task -> {
                         if (task.isSuccessful()) {
-                            // Update SQLite with new username
-                            dbHelper.updateUsername(firebaseUser.getEmail(), newUsername);
-
-                            // Update the UI with new username
-                            updateLocalData(newUsername, firebaseUser.getEmail());
-
-                            // Notify ChatActivity to refresh the header
+                            usernameEditText.setText(newUsername);
                             if (getActivity() instanceof ChatActivity) {
                                 ((ChatActivity) getActivity()).refreshHeader();
                             }
-
-                            Toast.makeText(getActivity(), "Username updated successfully.", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(getActivity(), "Username updated successfully", Toast.LENGTH_SHORT).show();
                         } else {
                             Toast.makeText(getActivity(), "Failed to update username: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
                         }
                     });
-        } else {
-            // Handle SQLite user
-            String currentEmail = emailEditText.getText().toString().trim();
-            if (dbHelper.updateUsername(currentEmail, newUsername)) {
-                updateLocalData(newUsername, currentEmail);
-                Toast.makeText(getActivity(), "Username updated successfully.", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(getActivity(), "Failed to update username", Toast.LENGTH_SHORT).show();
-            }
         }
     }
 
@@ -441,6 +377,7 @@ public class ProfileFragment extends Fragment {
                 .setPositiveButton("OK", null)
                 .show();
     }
+
     private void updateLocalData(String newUsername, String newEmail) {
         usernameEditText.setText(newUsername);
         emailEditText.setText(newEmail);
@@ -486,17 +423,6 @@ public class ProfileFragment extends Fragment {
         }
     }
 
-    private void saveProfilePictureLocally(Bitmap bitmap) {
-        String email = emailEditText.getText().toString();
-        byte[] profilePicBytes = bitmapToByteArray(bitmap);
-
-        if (dbHelper.updateProfilePicture(email, profilePicBytes)) {
-            Log.d("ProfilePicture", "Profile picture saved locally");
-        } else {
-            Log.e("ProfilePicture", "Failed to save profile picture locally");
-        }
-    }
-
     private void uploadProfilePicture(Bitmap bitmap) {
         FirebaseUser user = mAuth.getCurrentUser();
         if (user != null && user.getUid() != null) {
@@ -537,65 +463,5 @@ public class ProfileFragment extends Fragment {
         } else {
             Toast.makeText(getActivity(), "User not logged in", Toast.LENGTH_SHORT).show();
         }
-    }
-
-    private void proceedWithUpload(FirebaseUser user, Bitmap bitmap) {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos);
-        byte[] data = baos.toByteArray();
-
-        StorageReference profilePicRef = storageRef.child("profile_pictures").child(user.getUid()).child("profile.jpg");
-
-        UploadTask uploadTask = profilePicRef.putBytes(data);
-        uploadTask.addOnSuccessListener(taskSnapshot -> {
-            profilePicRef.getDownloadUrl().addOnSuccessListener(uri -> {
-                UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
-                        .setPhotoUri(uri)
-                        .build();
-                user.updateProfile(profileUpdates)
-                        .addOnSuccessListener(aVoid -> {
-                            Toast.makeText(getActivity(), "Profile picture updated successfully", Toast.LENGTH_SHORT).show();
-                            // Save to SQLite
-                            saveProfilePictureLocally(bitmap);
-                            // Notify ChatActivity to refresh the header
-                            notifyHeaderUpdate();
-                        })
-                        .addOnFailureListener(e -> {
-                            Toast.makeText(getActivity(), "Failed to update profile: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                            Log.e("UploadError", "Failed to update profile: " + e.getMessage());
-                        });
-            }).addOnFailureListener(e -> {
-                Toast.makeText(getActivity(), "Failed to get download URL: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                Log.e("UploadError", "Failed to get download URL: " + e.getMessage());
-            });
-        }).addOnFailureListener(e -> {
-            Toast.makeText(getActivity(), "Failed to upload profile picture: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-            Log.e("UploadError", "Failed to upload profile picture: " + e.getMessage());
-        });
-
-        uploadTask.addOnProgressListener(taskSnapshot -> {
-            double progress = (100.0 * taskSnapshot.getBytesTransferred()) / taskSnapshot.getTotalByteCount();
-            Log.d("UploadProgress", "Upload is " + progress + "% done");
-        });
-    }
-
-    private void notifyHeaderUpdate() {
-        if (getActivity() instanceof ChatActivity) {
-            ((ChatActivity) getActivity()).refreshHeader();
-        }
-    }
-
-
-
-    // Convert Bitmap to byte array
-    private byte[] bitmapToByteArray(Bitmap bitmap) {
-        ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
-        return stream.toByteArray();
-    }
-
-    // Convert byte array to Bitmap
-    private Bitmap byteArrayToBitmap(byte[] byteArray) {
-        return BitmapFactory.decodeByteArray(byteArray, 0, byteArray.length);
     }
 }

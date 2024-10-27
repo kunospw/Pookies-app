@@ -2,7 +2,6 @@ package com.example.pookies;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
@@ -25,7 +24,6 @@ public class RegisterActivity extends AppCompatActivity {
     EditText etEmail, etName, etPassword, etConfirmPassword;
     Button btnSignUp;
     TextView tvAlreadyHaveAccount;
-    DBHelper dbHelper;
     FirebaseAuth mAuth;
 
     @Override
@@ -33,7 +31,6 @@ public class RegisterActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_register);
 
-        dbHelper = new DBHelper(this);  // Initialize SQLite DB Helper
         mAuth = FirebaseAuth.getInstance();  // Initialize Firebase Auth
 
         // Initialize views
@@ -79,22 +76,27 @@ public class RegisterActivity extends AppCompatActivity {
             return;
         }
 
-        // Check if the user already exists in SQLite
-        User existingUser = dbHelper.getUserByEmail(email);
-        if (existingUser != null) {
-            Toast.makeText(RegisterActivity.this, "User already exists with this email", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
         // Register user with Firebase
         mAuth.createUserWithEmailAndPassword(email, password)
                 .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
                     @Override
                     public void onComplete(@NonNull Task<AuthResult> task) {
                         if (task.isSuccessful()) {
-                            // Firebase registration successful, update Firebase profile and register user in SQLite
+                            // Firebase registration successful, update Firebase profile
                             updateFirebaseProfile(name);
-                            registerInSQLite(email, name, password);
+
+                            // Save user ID in SharedPreferences for session management
+                            getSharedPreferences("APP_PREFS", MODE_PRIVATE)
+                                    .edit()
+                                    .putString("USER_ID", mAuth.getCurrentUser().getUid())
+                                    .apply();
+
+                            Toast.makeText(RegisterActivity.this, "Registration successful", Toast.LENGTH_SHORT).show();
+
+                            // Redirect to LoginActivity
+                            Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
+                            startActivity(intent);
+                            finish();
                         } else {
                             // Firebase registration failed
                             Toast.makeText(RegisterActivity.this, "Registration failed: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
@@ -118,29 +120,5 @@ public class RegisterActivity extends AppCompatActivity {
                         }
                     }
                 });
-    }
-
-    // Register user in SQLite database
-    private void registerInSQLite(String email, String name, String password) {
-        boolean success = dbHelper.insertUser(email, name, password);
-        if (success) {
-            Toast.makeText(RegisterActivity.this, "Registration successful", Toast.LENGTH_SHORT).show();
-            // Registration successful, save user ID in SharedPreferences for session management
-            getSharedPreferences("APP_PREFS", MODE_PRIVATE)
-                    .edit()
-                    .putString("USER_ID", email)
-                    .apply();
-
-            // Redirect to LoginActivity
-            Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
-            startActivity(intent);
-            finish();
-        } else {
-            // SQLite registration failed, rollback Firebase user creation
-            Toast.makeText(RegisterActivity.this, "SQLite registration failed", Toast.LENGTH_SHORT).show();
-            if (mAuth.getCurrentUser() != null) {
-                mAuth.getCurrentUser().delete();  // Remove the user from Firebase
-            }
-        }
     }
 }

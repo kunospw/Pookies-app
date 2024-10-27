@@ -4,8 +4,6 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
@@ -32,21 +30,30 @@ import com.bumptech.glide.signature.ObjectKey;
 import com.google.android.material.navigation.NavigationView;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 
 public class ChatActivity extends AppCompatActivity {
     private static final int PROFILE_UPDATE_REQUEST = 1001;
     private static final String TAG = "ChatActivity";
+    private SessionManager sessionManager;
 
     DrawerLayout drawerLayout;
     ImageButton buttonDrawerToggle;
     NavigationView navigationView;
     ImageView userImage;
     TextView textUsername, textEmail;
-    DBHelper dbHelper;
     FirebaseStorage storage;
     StorageReference storageRef;
+    DatabaseReference userRef;
+    FirebaseAuth firebaseAuth;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,33 +61,34 @@ public class ChatActivity extends AppCompatActivity {
         setContentView(R.layout.activity_chat);
         checkBluetoothPermission();
 
-        dbHelper = new DBHelper(this);
+        // Initialize Firebase components
+        firebaseAuth = FirebaseAuth.getInstance();
         storage = FirebaseStorage.getInstance();
         storageRef = storage.getReference();
+        userRef = FirebaseDatabase.getInstance().getReference("users");
 
-        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+        // Initialize SessionManager
+        sessionManager = SessionManager.getInstance(this);
+        sessionManager.checkLogin();
+
+        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
         if (currentUser != null) {
             String firebaseUserID = currentUser.getUid();
             String email = currentUser.getEmail();
 
+            // Save both ID and email to SharedPreferences
             SharedPreferences prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);
             SharedPreferences.Editor editor = prefs.edit();
             editor.putString("USER_ID", firebaseUserID);
+            editor.putString("USER_EMAIL", email);
             editor.apply();
-
-            User localUser = dbHelper.getUserByEmail(email);
-            if (localUser == null) {
-                String displayName = currentUser.getDisplayName();
-                dbHelper.insertUser(email, displayName, ""); // Password left empty as managed by Firebase
-                localUser = dbHelper.getUserByEmail(email);
-            }
 
             initializeUI();
             updateDrawerHeader();
 
             View.OnClickListener profileClickListener = view -> {
-                loadProfileFragment();  // Load the ProfileFragment
-                drawerLayout.close();   // Close the drawer
+                loadProfileFragment();
+                drawerLayout.close();
             };
             userImage.setOnClickListener(profileClickListener);
             textUsername.setOnClickListener(profileClickListener);
@@ -125,22 +133,20 @@ public class ChatActivity extends AppCompatActivity {
             userImage.setImageResource(R.drawable.person); // Default image if user is not logged in
         }
     }
-
     public void updateDrawerHeader() {
         Log.d(TAG, "updateDrawerHeader: Updating drawer header");
-        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
         if (currentUser != null) {
-            String email = currentUser.getEmail();
-            User localUser = dbHelper.getUserByEmail(email);
-            if (localUser != null) {
-                textUsername.setText(localUser.getName());
-                textEmail.setText(localUser.getEmail());
+            // Set email directly from FirebaseAuth
+            textEmail.setText(currentUser.getEmail());
 
-                // Load profile picture
-                loadProfilePicture(currentUser.getUid(), email);
-            } else {
-                Log.e(TAG, "updateDrawerHeader: Local user is null for email: " + email);
-            }
+            // Set display name from FirebaseAuth, or email as fallback
+            String displayName = currentUser.getDisplayName();
+            textUsername.setText(displayName != null && !displayName.isEmpty() ?
+                    displayName : currentUser.getEmail());
+
+            // Load profile picture
+            loadProfilePicture(currentUser.getUid(), currentUser.getEmail());
         } else {
             Log.e(TAG, "updateDrawerHeader: Current Firebase user is null");
         }
@@ -268,19 +274,35 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void logOutUser() {
-        FirebaseAuth.getInstance().signOut();
-        getSharedPreferences("APP_PREFS", MODE_PRIVATE).edit().remove("USER_ID").apply();
+        // Sign out from Firebase
+        firebaseAuth.signOut();
+
+        // Clear preferences
+        getSharedPreferences("APP_PREFS", MODE_PRIVATE)
+                .edit()
+                .clear()
+                .apply();
+
+        // Let session manager handle additional cleanup
+        sessionManager.logoutUser();
+
         Toast.makeText(ChatActivity.this, "You have been logged out", Toast.LENGTH_SHORT).show();
         redirectToLogin();
     }
 
     private void redirectToLogin() {
-        Intent intent = new Intent(ChatActivity.this, LoginActivity.class);
+        Intent intent = new Intent(ChatActivity.this, MainActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
     }
-
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (!sessionManager.isLoggedIn()) {
+            redirectToLogin();
+        }
+    }
     private void checkBluetoothPermission() {
         if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED ||
                 ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED ||

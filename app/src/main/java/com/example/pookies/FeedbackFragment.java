@@ -1,7 +1,5 @@
 package com.example.pookies;
 
-import android.content.ContentValues;
-import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import androidx.fragment.app.Fragment;
 import android.view.LayoutInflater;
@@ -30,12 +28,10 @@ public class FeedbackFragment extends Fragment {
     private EditText editTextFeedback;
     private TextView errorTextView;
     private Button submitButton;
-    private DBHelper dbHelper;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        dbHelper = new DBHelper(getContext()); // Initialize SQLite helper
     }
 
     @Override
@@ -107,37 +103,12 @@ public class FeedbackFragment extends Fragment {
             mDatabase.child("feedback").child(userId).push().setValue(feedback)
                     .addOnCompleteListener(task -> {
                         if (task.isSuccessful()) {
-                            // Save to SQLite as backup
-                            saveFeedbackToSQLite(feedback);
                             Toast.makeText(getContext(), "Feedback submitted successfully!", Toast.LENGTH_SHORT).show();
-                            clearForm(); // Clear form after successful submission
+                            clearForm();
                         } else {
-                            // If Firebase save fails, save feedback locally in SQLite
-                            Toast.makeText(getContext(), "Failed to submit feedback to Firebase. Saving locally.", Toast.LENGTH_SHORT).show();
-                            saveFeedbackToSQLite(feedback);
+                            Toast.makeText(getContext(), "Failed to submit feedback. Please try again.", Toast.LENGTH_SHORT).show();
                         }
                     });
-        }
-    }
-
-    private void saveFeedbackToSQLite(Feedback feedback) {
-        SQLiteDatabase db = dbHelper.getWritableDatabase();
-        ContentValues values = new ContentValues();
-
-        // Insert feedback data into SQLite database
-        values.put("userId", feedback.getUserId());
-        values.put("username", feedback.getUsername());
-        values.put("email", feedback.getEmail());
-        values.put("feedbackType", feedback.getFeedbackType());
-        values.put("description", feedback.getDescription());
-        values.put("feedbackTime", feedback.getFeedbackTime());
-
-        // Insert feedback data into SQLite and handle possible error
-        long newRowId = db.insert("feedback", null, values);
-        if (newRowId == -1) {
-            Toast.makeText(getContext(), "Error saving feedback locally", Toast.LENGTH_SHORT).show();
-        } else {
-            Toast.makeText(getContext(), "Feedback saved locally", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -151,13 +122,5 @@ public class FeedbackFragment extends Fragment {
         // Clear the form fields after submission
         radioGroup.clearCheck();
         editTextFeedback.setText("");
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        if (dbHelper != null) {
-            dbHelper.close(); // Close database when fragment is destroyed
-        }
     }
 }

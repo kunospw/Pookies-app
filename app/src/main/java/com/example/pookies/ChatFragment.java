@@ -6,7 +6,6 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
-
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -16,6 +15,13 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -36,13 +42,13 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     ImageButton sendButton;
     List<Message> messageList;
     MessageAdapter messageAdapter;
+    FirebaseAuth mAuth;
     String userId;
-    DBHelper dbHelper;
     MessagingService messagingService;
     boolean isBound = false;
     public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     OkHttpClient client = new OkHttpClient();
-
+    DatabaseReference mDatabase;
     private ServiceConnection connection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName className, IBinder service) {
@@ -62,12 +68,12 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         messageList = new ArrayList<>();
-        dbHelper = new DBHelper(getContext());
-        // Get userId from SharedPreferences or similar storage
-        // For example:
-        userId = getActivity().getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
-                .getString("userId", "");
-
+        mAuth = FirebaseAuth.getInstance();
+        FirebaseUser user = mAuth.getCurrentUser();
+        if (user != null) {
+            userId = user.getUid();
+            mDatabase = FirebaseDatabase.getInstance().getReference("users").child(userId).child("messages");
+        }
         Intent intent = new Intent(getContext(), MessagingService.class);
         getActivity().bindService(intent, connection, Context.BIND_AUTO_CREATE);
     }
@@ -110,21 +116,41 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
 
     private void loadChatHistory() {
         messageList.clear();
-        List<Message> messages = dbHelper.getMessages(userId);
-        messageList.addAll(messages);
-        messageAdapter.notifyDataSetChanged();
-        recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
+        mDatabase.addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                messageList.clear();
+                for (DataSnapshot messageSnapshot : dataSnapshot.getChildren()) {
+                    Message message = messageSnapshot.getValue(Message.class);
+                    if (message != null) {
+                        messageList.add(message);
+                    }
+                }
+                messageAdapter.notifyDataSetChanged();
+                recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError databaseError) {
+                // Handle possible errors
+            }
+        });
     }
     void addToChat(String message, String sentBy) {
         if (getActivity() != null) {
             getActivity().runOnUiThread(() -> {
                 Message newMessage = new Message(message, sentBy);
-                // Save message to SQLite
-                dbHelper.insertMessage(newMessage, userId);
-                // Update UI
-                messageList.add(newMessage);
-                messageAdapter.notifyItemInserted(messageList.size() - 1);
-                recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
+
+                // Save message to Firebase
+                String messageId = mDatabase.push().getKey();
+                if (messageId != null) {
+                    mDatabase.child(messageId).setValue(newMessage);
+                }
+
+                // Send message through MessagingService
+                if (isBound) {
+                    messagingService.sendMessage(newMessage);
+                }
             });
         }
     }
@@ -196,9 +222,6 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     public void onNewMessage(Message message) {
         if (getActivity() != null) {
             getActivity().runOnUiThread(() -> {
-                messageList.add(message);
-                messageAdapter.notifyItemInserted(messageList.size() - 1);
-                recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
             });
         }
     }

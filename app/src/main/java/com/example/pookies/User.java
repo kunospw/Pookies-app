@@ -1,21 +1,31 @@
-// User.java
 package com.example.pookies;
 
 public class User {
-    private int id;
+    private String uid;
     private String email;
     private String name;
-    private String password;
+    private String profilePicUrl;
 
-    public User(int id, String email, String name, String password) {
-        this.id = id;
+    // Required empty constructor for Firebase
+    public User() {}
+
+    public User(String uid, String email, String name, String profilePicUrl) {
+        this.uid = uid;
         this.email = email;
         this.name = name;
-        this.password = password;
+        this.profilePicUrl = profilePicUrl;
     }
 
-    public int getId() { return id; }
+    // Getters and setters
+    public String getUid() { return uid; }
+    public void setUid(String uid) { this.uid = uid; }
+
     public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+
     public String getName() { return name; }
-    public String getPassword() { return password; }
+    public void setName(String name) { this.name = name; }
+
+    public String getProfilePicUrl() { return profilePicUrl; }
+    public void setProfilePicUrl(String profilePicUrl) { this.profilePicUrl = profilePicUrl; }
 }

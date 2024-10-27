@@ -27,7 +27,7 @@ public class IntroActivity extends AppCompatActivity implements ShakeListener.Sh
     public void onShake() {
         // Stop shake listener and transition to SplashActivity
         shakeListener.stop();
-        Intent intent = new Intent(IntroActivity.this, SpalshActivity.class);
+        Intent intent = new Intent(IntroActivity.this, SplashActivity.class);
         startActivity(intent);
         finish();
     }

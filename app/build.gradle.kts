@@ -42,6 +42,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.10.1")
     implementation(libs.firebase.storage)
     implementation(libs.play.services.location)
+    implementation(libs.firebase.firestore)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
@@ -51,5 +52,7 @@ dependencies {
     implementation ("com.github.bumptech.glide:glide:4.12.0")
     annotationProcessor ("com.github.bumptech.glide:compiler:4.12.0")
     implementation ("com.google.android.material:material:1.8.0")
+    implementation ("com.google.firebase:firebase-bom:32.7.0")
+
 
 }
