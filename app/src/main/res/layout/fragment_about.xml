@@ -1,14 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".AboutFragment">
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:background="@drawable/chat_bcg">
 
-    <!-- TODO: Update blank fragment layout -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:text="@string/hello_blank_fragment" />
 
-</FrameLayout>
+    <LinearLayout
+        android:layout_width="361dp"
+        android:layout_height="401dp"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentBottom="true"
+        android:layout_marginStart="23dp"
+        android:layout_marginTop="180dp"
+        android:layout_marginEnd="27dp"
+        android:layout_marginBottom="149dp"
+        android:background="@drawable/feedback_bcg"
+        android:elevation="30dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/About"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="20sp"
+            android:layout_marginTop="40dp"
+            android:fontFamily="@font/montserrat_bold"
+            android:text="About"
+            android:textColor="@color/blue_dark"
+            android:textSize="40dp"
+            android:textStyle="bold" />
+
+
+        <TextView
+            android:id="@+id/AboutPookies"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="20sp"
+            android:layout_marginTop="40dp"
+            android:fontFamily="@font/montserrat"
+            android:text="Pookies! is a fun, easy-to-use chatbot that’s ready to chat with you anytime, anywhere.\n Whether you need a friendly conversation, quick entertainment, or just someone to talk to, Pookies is your go-to companion—always ready for a chat!"
+            android:textAlignment="textStart"
+            android:textColor="@color/black"
+            android:textSize="20dp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+</RelativeLayout>

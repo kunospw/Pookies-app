@@ -141,5 +141,16 @@
             android:text="Don't have an account? Sign Up here!"
             android:textColor="#464646"
             android:textSize="14sp" />
+        <TextView
+            android:id="@+id/forgotPassword"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginTop="8dp"
+            android:text="Forgot Password?"
+            android:textColor="@color/blue_dark"
+            android:textSize="14sp"
+            android:fontFamily="@font/montserrat_bold" />
+
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

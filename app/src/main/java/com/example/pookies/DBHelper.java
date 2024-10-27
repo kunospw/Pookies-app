@@ -31,6 +31,13 @@ public class DBHelper extends SQLiteOpenHelper {
     private static final String COL_FEEDBACK_TYPE = "feedbackType";
     private static final String COL_FEEDBACK_DESCRIPTION = "description";
     private static final String COL_FEEDBACK_TIME = "feedbackTime";
+    // Message table
+    private static final String TABLE_MESSAGES = "messages";
+    private static final String COL_MESSAGE_ID = "id";
+    private static final String COL_MESSAGE_CONTENT = "content";
+    private static final String COL_MESSAGE_SENT_BY = "sent_by";
+    private static final String COL_MESSAGE_USER_ID = "user_id";
+    private static final String COL_MESSAGE_TIMESTAMP = "timestamp";
 
     public DBHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -57,6 +64,15 @@ public class DBHelper extends SQLiteOpenHelper {
                 + COL_FEEDBACK_DESCRIPTION + " TEXT,"
                 + COL_FEEDBACK_TIME + " TEXT" + ")";
         db.execSQL(CREATE_FEEDBACK_TABLE);
+
+        // Create messages table
+        String CREATE_MESSAGES_TABLE = "CREATE TABLE " + TABLE_MESSAGES + "("
+                + COL_MESSAGE_ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + COL_MESSAGE_CONTENT + " TEXT,"
+                + COL_MESSAGE_SENT_BY + " TEXT,"
+                + COL_MESSAGE_USER_ID + " TEXT,"
+                + COL_MESSAGE_TIMESTAMP + " TIMESTAMP DEFAULT CURRENT_TIMESTAMP" + ")";
+        db.execSQL(CREATE_MESSAGES_TABLE);
     }
 
     @Override
@@ -68,6 +84,7 @@ public class DBHelper extends SQLiteOpenHelper {
         // Drop older tables if existed
         db.execSQL("DROP TABLE IF EXISTS " + TABLE_USERS);
         db.execSQL("DROP TABLE IF EXISTS " + TABLE_FEEDBACK);
+        db.execSQL("DROP TABLE IF EXISTS " + TABLE_MESSAGES);
         onCreate(db);
     }
 
@@ -203,5 +220,49 @@ public class DBHelper extends SQLiteOpenHelper {
     public int deleteFeedback(String userId, String feedbackTime) {
         SQLiteDatabase db = this.getWritableDatabase();
         return db.delete(TABLE_FEEDBACK, COL_FEEDBACK_USER_ID + "=? AND " + COL_FEEDBACK_TIME + "=?", new String[]{userId, feedbackTime});
+    }
+    public long insertMessage(Message message, String userId) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COL_MESSAGE_CONTENT, message.getMessage());
+        values.put(COL_MESSAGE_SENT_BY, message.getSentBy());
+        values.put(COL_MESSAGE_USER_ID, userId);
+        return db.insert(TABLE_MESSAGES, null, values);
+    }
+
+    public List<Message> getMessages(String userId) {
+        List<Message> messageList = new ArrayList<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+
+        String selectQuery = "SELECT * FROM " + TABLE_MESSAGES +
+                " WHERE " + COL_MESSAGE_USER_ID + " = ?" +
+                " ORDER BY " + COL_MESSAGE_TIMESTAMP + " ASC";
+
+        Cursor cursor = db.rawQuery(selectQuery, new String[]{userId});
+
+        if (cursor.moveToFirst()) {
+            do {
+                String content = cursor.getString(cursor.getColumnIndexOrThrow(COL_MESSAGE_CONTENT));
+                String sentBy = cursor.getString(cursor.getColumnIndexOrThrow(COL_MESSAGE_SENT_BY));
+                Message message = new Message(content, sentBy);
+                messageList.add(message);
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
+        return messageList;
+    }
+    public boolean deleteAllMessages(String userId) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        int result = db.delete(TABLE_MESSAGES, COL_MESSAGE_USER_ID + "=?", new String[]{userId});
+        return result > 0;
+    }
+
+    public boolean deleteUser(String userId) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        // First delete all messages
+        db.delete(TABLE_MESSAGES, COL_MESSAGE_USER_ID + "=?", new String[]{userId});
+        // Then delete the user
+        int result = db.delete(TABLE_USERS, COL_USER_ID + "=?", new String[]{userId});
+        return result > 0;
     }
 }
