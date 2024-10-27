@@ -11,16 +11,40 @@ import java.util.List;
 
 public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MyViewHolder> {
     List<Message> messageList;
+    private final MessageClickListener messageClickListener;
 
-    public MessageAdapter(List<Message> messageList) {
+    public interface MessageClickListener {
+        void onMessageClick(View view, Message message, int position);
+    }
+
+    // Modified constructor to accept the click listener
+    public MessageAdapter(List<Message> messageList, MessageClickListener messageClickListener) {
         this.messageList = messageList;
+        this.messageClickListener = messageClickListener;
     }
 
     @NonNull
     @Override
     public MyViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View chatView = LayoutInflater.from(parent.getContext()).inflate(R.layout.chat_item, null);
-        return new MyViewHolder(chatView);
+        View chatView = LayoutInflater.from(parent.getContext()).inflate(R.layout.chat_item, parent, false);
+        MyViewHolder viewHolder = new MyViewHolder(chatView);
+
+        // Set up click listeners in onCreateViewHolder
+        viewHolder.leftTextView.setOnClickListener(v -> {
+            int position = viewHolder.getAdapterPosition();
+            if (position != RecyclerView.NO_POSITION && messageClickListener != null) {
+                messageClickListener.onMessageClick(v, messageList.get(position), position);
+            }
+        });
+
+        viewHolder.rightTextView.setOnClickListener(v -> {
+            int position = viewHolder.getAdapterPosition();
+            if (position != RecyclerView.NO_POSITION && messageClickListener != null) {
+                messageClickListener.onMessageClick(v, messageList.get(position), position);
+            }
+        });
+
+        return viewHolder;
     }
 
     @Override

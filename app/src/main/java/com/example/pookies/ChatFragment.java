@@ -1,5 +1,6 @@
 package com.example.pookies;
 
+import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -11,10 +12,13 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import android.view.LayoutInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.PopupMenu;
+import android.widget.Toast;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DataSnapshot;
@@ -77,7 +81,6 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
         Intent intent = new Intent(getContext(), MessagingService.class);
         getActivity().bindService(intent, connection, Context.BIND_AUTO_CREATE);
     }
-
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
@@ -86,7 +89,14 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
         messageEditText = view.findViewById(R.id.message_edit_text);
         sendButton = view.findViewById(R.id.send_btn);
 
-        messageAdapter = new MessageAdapter(messageList);
+        // Create adapter with click listener
+        messageAdapter = new MessageAdapter(messageList, new MessageAdapter.MessageClickListener() {
+            @Override
+            public void onMessageClick(View view, Message message, int position) {
+                showMessageOptions(view, message, position);
+            }
+        });
+
         recyclerView.setAdapter(messageAdapter);
         LinearLayoutManager llm = new LinearLayoutManager(getContext());
         llm.setStackFromEnd(true);
@@ -103,6 +113,96 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
 
         return view;
     }
+    private void showMessageOptions(View view, Message message, int position) {
+        PopupMenu popup = new PopupMenu(getContext(), view);
+        popup.getMenuInflater().inflate(R.menu.message_options_menu, popup.getMenu());
+
+        popup.setOnMenuItemClickListener(item -> {
+            int itemId = item.getItemId();
+            if (itemId == R.id.edit_message) {
+                showEditDialog(message);
+                return true;
+            } else if (itemId == R.id.delete_message) {
+                showDeleteConfirmation(message, position);
+                return true;
+            }
+            return false;
+        });
+
+        popup.show();
+    }
+
+    private void showEditDialog(Message message) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        final EditText editText = new EditText(getContext());
+        editText.setText(message.getMessage());
+
+        builder.setTitle("Edit Message")
+                .setView(editText)
+                .setPositiveButton("Save", (dialog, which) -> {
+                    String newContent = editText.getText().toString().trim();
+                    if (!newContent.isEmpty()) {
+                        updateMessage(message, newContent);
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showDeleteConfirmation(Message message, int position) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setTitle("Delete Message")
+                .setMessage("This will delete this message and all subsequent messages. Continue?")
+                .setPositiveButton("Delete", (dialog, which) -> {
+                    deleteMessageAndSubsequent(message, position);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void updateMessage(Message message, String newContent) {
+        // Find and update the message in Firebase
+        mDatabase.orderByChild("timestamp").equalTo(message.getTimestamp())
+                .addListenerForSingleValueEvent(new ValueEventListener() {
+                    @Override
+                    public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                        for (DataSnapshot snapshot : dataSnapshot.getChildren()) {
+                            snapshot.getRef().child("message").setValue(newContent)
+                                    .addOnSuccessListener(aVoid -> {
+                                        Toast.makeText(getContext(), "Message updated", Toast.LENGTH_SHORT).show();
+                                    })
+                                    .addOnFailureListener(e -> {
+                                        Toast.makeText(getContext(), "Failed to update message", Toast.LENGTH_SHORT).show();
+                                    });
+                        }
+                    }
+
+                    @Override
+                    public void onCancelled(@NonNull DatabaseError databaseError) {
+                        Toast.makeText(getContext(), "Error: " + databaseError.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                });
+    }
+
+    private void deleteMessageAndSubsequent(Message message, int position) {
+        // Delete the message and all subsequent messages from Firebase
+        mDatabase.orderByChild("timestamp")
+                .startAt(message.getTimestamp())
+                .addListenerForSingleValueEvent(new ValueEventListener() {
+                    @Override
+                    public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                        for (DataSnapshot snapshot : dataSnapshot.getChildren()) {
+                            snapshot.getRef().removeValue();
+                        }
+                        Toast.makeText(getContext(), "Messages deleted", Toast.LENGTH_SHORT).show();
+                    }
+
+                    @Override
+                    public void onCancelled(@NonNull DatabaseError databaseError) {
+                        Toast.makeText(getContext(), "Error: " + databaseError.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                });
+    }
 
     @Override
     public void onDestroy() {
@@ -116,7 +216,7 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
 
     private void loadChatHistory() {
         messageList.clear();
-        mDatabase.addValueEventListener(new ValueEventListener() {
+        mDatabase.orderByChild("timestamp").addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
                 messageList.clear();
@@ -127,12 +227,15 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
                     }
                 }
                 messageAdapter.notifyDataSetChanged();
-                recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
+                if (!messageList.isEmpty()) {
+                    recyclerView.smoothScrollToPosition(messageList.size() - 1);
+                }
             }
 
             @Override
             public void onCancelled(@NonNull DatabaseError databaseError) {
-                // Handle possible errors
+                Toast.makeText(getContext(), "Failed to load messages: " + databaseError.getMessage(),
+                        Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -144,7 +247,15 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
                 // Save message to Firebase
                 String messageId = mDatabase.push().getKey();
                 if (messageId != null) {
-                    mDatabase.child(messageId).setValue(newMessage);
+                    mDatabase.child(messageId).setValue(newMessage)
+                            .addOnSuccessListener(aVoid -> {
+                                messageEditText.setText("");
+                                recyclerView.smoothScrollToPosition(messageList.size());
+                            })
+                            .addOnFailureListener(e -> {
+                                Toast.makeText(getContext(), "Failed to send message: " + e.getMessage(),
+                                        Toast.LENGTH_SHORT).show();
+                            });
                 }
 
                 // Send message through MessagingService
@@ -222,6 +333,9 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     public void onNewMessage(Message message) {
         if (getActivity() != null) {
             getActivity().runOnUiThread(() -> {
+                messageList.add(message);
+                messageAdapter.notifyItemInserted(messageList.size() - 1);
+                recyclerView.smoothScrollToPosition(messageList.size() - 1);
             });
         }
     }

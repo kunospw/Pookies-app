@@ -5,6 +5,7 @@ public class Message {
     public static String SENT_BY_BOT = "BOT";
     public String message;
     public String sentBy;
+    public long timestamp;   // Added timestamp field
 
     // Default constructor for Firebase
     public Message() {
@@ -13,6 +14,7 @@ public class Message {
     public Message(String message, String sentBy) {
         this.message = message;
         this.sentBy = sentBy;
+        this.timestamp = System.currentTimeMillis();  // Set timestamp on creation
     }
 
     public String getMessage() {
@@ -29,5 +31,13 @@ public class Message {
 
     public void setSentBy(String sentBy) {
         this.sentBy = sentBy;
+    }
+
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(long timestamp) {
+        this.timestamp = timestamp;
     }
 }
