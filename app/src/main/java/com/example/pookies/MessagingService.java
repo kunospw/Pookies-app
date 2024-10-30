@@ -4,20 +4,23 @@ import android.app.Service;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.IBinder;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.database.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MessagingService extends Service {
     private final IBinder binder = new LocalBinder();
-    private DatabaseReference mDatabase;
-    private List<MessageListener> listeners = new ArrayList<>();
-    private FirebaseAuth mAuth;
+    private final List<MessageListener> listeners = new ArrayList<>();
+    private DBHelper dbHelper;
+    private String currentUserId;
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     public class LocalBinder extends Binder {
         MessagingService getService() {
@@ -28,12 +31,13 @@ public class MessagingService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        mAuth = FirebaseAuth.getInstance();
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser != null) {
-            String userId = currentUser.getUid();
-            mDatabase = FirebaseDatabase.getInstance().getReference("users").child(userId).child("messages");
-            listenForNewMessages();
+        dbHelper = new DBHelper(this);
+        // Get current user ID from SharedPreferences
+        currentUserId = getSharedPreferences("UserPrefs", MODE_PRIVATE)
+                .getString("user_id", null);
+
+        if (currentUserId == null) {
+            Log.e("MessagingService", "No user ID found in SharedPreferences");
         }
     }
 
@@ -43,39 +47,68 @@ public class MessagingService extends Service {
         return binder;
     }
 
-    private void listenForNewMessages() {
-        mDatabase.addChildEventListener(new ChildEventListener() {
-            @Override
-            public void onChildAdded(@NonNull DataSnapshot dataSnapshot, @Nullable String previousChildName) {
-                Message message = dataSnapshot.getValue(Message.class);
-                if (message != null) {
+    public void sendMessage(Message message) {
+        if (currentUserId == null) {
+            Log.e("MessagingService", "Cannot send message: No user ID");
+            return;
+        }
+
+        executorService.execute(() -> {
+            // Save message to database
+            message.setUserId(currentUserId);
+            boolean success = dbHelper.insertMessage(message, currentUserId);
+
+            if (success) {
+                // Notify listeners on main thread
+                mainHandler.post(() -> {
                     for (MessageListener listener : listeners) {
                         listener.onNewMessage(message);
                     }
-                }
+                });
+            } else {
+                Log.e("MessagingService", "Failed to save message to database");
             }
-
-            @Override
-            public void onChildChanged(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {}
-
-            @Override
-            public void onChildRemoved(@NonNull DataSnapshot snapshot) {}
-
-            @Override
-            public void onChildMoved(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {}
-
-            @Override
-            public void onCancelled(@NonNull DatabaseError error) {}
         });
     }
 
-    public void sendMessage(Message message) {
-        if (mDatabase != null) {
-            String messageId = mDatabase.push().getKey();
-            if (messageId != null) {
-                mDatabase.child(messageId).setValue(message);
-            }
+    public void loadMessages() {
+        if (currentUserId == null) {
+            Log.e("MessagingService", "Cannot load messages: No user ID");
+            return;
         }
+
+        executorService.execute(() -> {
+            List<Message> messages = dbHelper.getMessages(currentUserId);
+            mainHandler.post(() -> {
+                for (MessageListener listener : listeners) {
+                    for (Message message : messages) {
+                        listener.onNewMessage(message);
+                    }
+                }
+            });
+        });
+    }
+
+    public void deleteAllMessages() {
+        if (currentUserId == null) {
+            Log.e("MessagingService", "Cannot delete messages: No user ID");
+            return;
+        }
+
+        executorService.execute(() -> {
+            boolean success = dbHelper.deleteAllMessages(currentUserId);
+            if (!success) {
+                Log.e("MessagingService", "Failed to delete messages");
+            }
+        });
+    }
+
+    public void setCurrentUserId(String userId) {
+        this.currentUserId = userId;
+        getSharedPreferences("UserPrefs", MODE_PRIVATE)
+                .edit()
+                .putString("user_id", userId)
+                .apply();
     }
 
     public void addMessageListener(MessageListener listener) {
@@ -84,6 +117,12 @@ public class MessagingService extends Service {
 
     public void removeMessageListener(MessageListener listener) {
         listeners.remove(listener);
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        executorService.shutdown();
     }
 
     public interface MessageListener {

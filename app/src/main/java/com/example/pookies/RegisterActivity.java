@@ -1,24 +1,13 @@
 package com.example.pookies;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
-import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.text.TextUtils;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
-import com.google.firebase.auth.AuthResult;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.UserProfileChangeRequest;
 
 public class RegisterActivity extends AppCompatActivity {
 
@@ -26,15 +15,13 @@ public class RegisterActivity extends AppCompatActivity {
     Button btnSignUp;
     TextView tvAlreadyHaveAccount;
     DBHelper dbHelper;
-    FirebaseAuth mAuth;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_register);
 
-        dbHelper = new DBHelper(this);  // Initialize SQLite DB Helper
-        mAuth = FirebaseAuth.getInstance();  // Initialize Firebase Auth
+        dbHelper = new DBHelper(this);
 
         // Initialize views
         etEmail = findViewById(R.id.emailInput);
@@ -45,102 +32,83 @@ public class RegisterActivity extends AppCompatActivity {
         tvAlreadyHaveAccount = findViewById(R.id.alreadyHaveAccount);
 
         // Navigate to LoginActivity if user already has an account
-        tvAlreadyHaveAccount.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
-                startActivity(intent);
-            }
+        tvAlreadyHaveAccount.setOnClickListener(v -> {
+            Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
+            startActivity(intent);
+            finish(); // Add this to prevent going back to register screen
         });
 
         // Register user when sign up button is clicked
-        btnSignUp.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                registerUser();
-            }
-        });
+        btnSignUp.setOnClickListener(v -> registerUser());
     }
 
     private void registerUser() {
-        final String email = etEmail.getText().toString().trim();
-        final String name = etName.getText().toString().trim();
+        String email = etEmail.getText().toString().trim();
+        String name = etName.getText().toString().trim();
         String password = etPassword.getText().toString().trim();
         String confirmPassword = etConfirmPassword.getText().toString().trim();
 
+        // Email validation
+        if (!isValidEmail(email)) {
+            etEmail.setError("Please enter a valid email address");
+            return;
+        }
+
         // Basic validation
-        if (TextUtils.isEmpty(email) || TextUtils.isEmpty(name) || TextUtils.isEmpty(password) || TextUtils.isEmpty(confirmPassword)) {
-            Toast.makeText(RegisterActivity.this, "All fields are required", Toast.LENGTH_SHORT).show();
+        if (TextUtils.isEmpty(name)) {
+            etName.setError("Name is required");
+            return;
+        }
+
+        // Password validation
+        if (password.length() < 6) {
+            etPassword.setError("Password must be at least 6 characters");
             return;
         }
 
         if (!password.equals(confirmPassword)) {
-            Toast.makeText(RegisterActivity.this, "Passwords do not match", Toast.LENGTH_SHORT).show();
+            etConfirmPassword.setError("Passwords do not match");
             return;
         }
 
-        // Check if the user already exists in SQLite
+        // Check if user already exists
         User existingUser = dbHelper.getUserByEmail(email);
         if (existingUser != null) {
-            Toast.makeText(RegisterActivity.this, "User already exists with this email", Toast.LENGTH_SHORT).show();
+            etEmail.setError("User already exists with this email");
             return;
         }
 
-        // Register user with Firebase
-        mAuth.createUserWithEmailAndPassword(email, password)
-                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            // Firebase registration successful, update Firebase profile and register user in SQLite
-                            updateFirebaseProfile(name);
-                            registerInSQLite(email, name, password);
-                        } else {
-                            // Firebase registration failed
-                            Toast.makeText(RegisterActivity.this, "Registration failed: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                });
-    }
-
-    // Update Firebase profile with the user's name
-    private void updateFirebaseProfile(String name) {
-        UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
-                .setDisplayName(name)
-                .build();
-
-        mAuth.getCurrentUser().updateProfile(profileUpdates)
-                .addOnCompleteListener(new OnCompleteListener<Void>() {
-                    @Override
-                    public void onComplete(@NonNull Task<Void> task) {
-                        if (!task.isSuccessful()) {
-                            Toast.makeText(RegisterActivity.this, "Failed to update profile", Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                });
-    }
-
-    // Register user in SQLite database
-    private void registerInSQLite(String email, String name, String password) {
+        // Register user in SQLite
         boolean success = dbHelper.insertUser(email, name, password);
         if (success) {
-            Toast.makeText(RegisterActivity.this, "Registration successful", Toast.LENGTH_SHORT).show();
-            // Registration successful, save user ID in SharedPreferences for session management
-            getSharedPreferences("APP_PREFS", MODE_PRIVATE)
+            // Get the newly created user to obtain the user_id
+            User newUser = dbHelper.getUserByEmail(email);
+
+            // Save user session with both email and user_id
+            getSharedPreferences("UserPrefs", MODE_PRIVATE)
                     .edit()
-                    .putString("USER_ID", email)
+                    .putString("email", email)
+                    .putString("user_id", newUser.getUserId())
                     .apply();
 
-            // Redirect to LoginActivity
+            Toast.makeText(RegisterActivity.this,
+                    "Registration successful", Toast.LENGTH_SHORT).show();
+
+            // Redirect to ChatActivity
             Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);
             finish();
         } else {
-            // SQLite registration failed, rollback Firebase user creation
-            Toast.makeText(RegisterActivity.this, "SQLite registration failed", Toast.LENGTH_SHORT).show();
-            if (mAuth.getCurrentUser() != null) {
-                mAuth.getCurrentUser().delete();  // Remove the user from Firebase
-            }
+            Toast.makeText(RegisterActivity.this,
+                    "Registration failed", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private boolean isValidEmail(String email) {
+        if (TextUtils.isEmpty(email)) {
+            return false;
+        }
+        return android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches();
     }
 }

@@ -11,38 +11,25 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
 import com.google.android.material.textfield.TextInputEditText;
-import com.google.firebase.auth.AuthResult;
-import com.google.firebase.auth.FirebaseAuth;
 
-import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
-import android.database.sqlite.SQLiteOpenHelper;
+import java.util.UUID;
 
 public class LoginActivity extends AppCompatActivity {
 
     EditText etEmail, etPassword;
     Button btnLogin;
-    TextView tvSignUp;
-
-    TextView tvForgotPassword;
+    TextView tvSignUp, tvForgotPassword;
     DBHelper dbHelper;
-    FirebaseAuth mAuth;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
 
-        dbHelper = new DBHelper(this); // Initialize SQLite DB Helper
-        SQLiteDatabase db = dbHelper.getWritableDatabase();
-
-        mAuth = FirebaseAuth.getInstance(); // Initialize Firebase Auth
+        dbHelper = new DBHelper(this);
 
         etEmail = findViewById(R.id.emailInput);
         etPassword = findViewById(R.id.passwordInput);
@@ -51,7 +38,6 @@ public class LoginActivity extends AppCompatActivity {
         tvForgotPassword = findViewById(R.id.forgotPassword);
 
         tvSignUp.setOnClickListener(v -> {
-            // Navigate to RegisterActivity
             Intent intent = new Intent(LoginActivity.this, RegisterActivity.class);
             startActivity(intent);
         });
@@ -65,10 +51,10 @@ public class LoginActivity extends AppCompatActivity {
             String password = etPassword.getText().toString().trim();
 
             if (TextUtils.isEmpty(email) || TextUtils.isEmpty(password)) {
-                Toast.makeText(LoginActivity.this, "Please enter both email and password", Toast.LENGTH_SHORT).show();
+                Toast.makeText(LoginActivity.this,
+                        "Please enter both email and password", Toast.LENGTH_SHORT).show();
             } else {
-                // Check both Firebase and SQLite authentication
-                authenticateWithFirebaseAndSQLite(email, password);
+                authenticateUser(email, password);
             }
         });
     }
@@ -92,10 +78,11 @@ public class LoginActivity extends AppCompatActivity {
             button.setOnClickListener(view -> {
                 String email = emailInput.getText().toString().trim();
                 if (!TextUtils.isEmpty(email)) {
-                    resetPassword(email);
+                    handlePasswordReset(email);
                     dialog.dismiss();
                 } else {
-                    Toast.makeText(LoginActivity.this, "Please enter your email", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(LoginActivity.this,
+                            "Please enter your email", Toast.LENGTH_SHORT).show();
                 }
             });
         });
@@ -103,82 +90,67 @@ public class LoginActivity extends AppCompatActivity {
         dialog.show();
     }
 
-    private void resetPassword(String email) {
-        // First, try to reset password using Firebase
-        mAuth.sendPasswordResetEmail(email)
-                .addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) {
-                        Toast.makeText(LoginActivity.this, "Password reset email sent", Toast.LENGTH_SHORT).show();
-                    } else {
-                        // If Firebase reset fails, check if the user exists in SQLite
-                        User user = dbHelper.getUserByEmail(email);
-                        if (user != null) {
-                            // For SQLite users, you might want to implement a custom password reset mechanism
-                            // For now, we'll just show a message
-                            Toast.makeText(LoginActivity.this, "Please contact support to reset your password", Toast.LENGTH_LONG).show();
-                        } else {
-                            Toast.makeText(LoginActivity.this, "No account found with this email", Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                });
-    }
-
-    /**
-     * Try both Firebase and SQLite authentication.
-     */
-    private void authenticateWithFirebaseAndSQLite(String email, String password) {
-        // First, try Firebase authentication
-        mAuth.signInWithEmailAndPassword(email, password)
-                .addOnCompleteListener(LoginActivity.this, task -> {
-                    if (task.isSuccessful()) {
-                        // Firebase authentication successful
-                        loginSuccess(email);
-                    } else {
-                        // Firebase authentication failed, now try SQLite
-                        authenticateWithSQLite(email, password);
-                    }
-                });
-    }
-
-    /**
-     * Try SQLite authentication if Firebase fails.
-     */
-    private void authenticateWithSQLite(String email, String password) {
+    private void handlePasswordReset(String email) {
         User user = dbHelper.getUserByEmail(email);
-        if (user != null && user.getPassword().equals(password)) {
-            // SQLite authentication successful
-            loginSuccess(email);
+        if (user != null) {
+            // Generate reset token and set expiry time (24 hours from now)
+            String resetToken = UUID.randomUUID().toString();
+            long expiryTime = System.currentTimeMillis() + (24 * 60 * 60 * 1000);
+
+            if (dbHelper.storeResetToken(email, resetToken, expiryTime)) {
+                // In a real app, you would send this token via email
+                // For demo purposes, we'll show it in a toast
+                Toast.makeText(LoginActivity.this,
+                        "Reset token generated: " + resetToken, Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(LoginActivity.this,
+                        "Failed to generate reset token", Toast.LENGTH_SHORT).show();
+            }
         } else {
-            // Both Firebase and SQLite failed, show account not found alert
-            showAccountNotFoundAlert("Authentication failed: Invalid email or password");
+            Toast.makeText(LoginActivity.this,
+                    "No account found with this email", Toast.LENGTH_SHORT).show();
         }
     }
 
-    /**
-     * Show an alert dialog if both Firebase and SQLite authentication fail.
-     */
-    private void showAccountNotFoundAlert(String message) {
-        new AlertDialog.Builder(LoginActivity.this)
-                .setTitle("Account Not Found")
-                .setMessage(message)
-                .setPositiveButton("OK", (dialog, which) -> dialog.dismiss())
-                .show();
-    }
+    private void authenticateUser(String email, String password) {
+        // First check if the email exists
+        User user = dbHelper.getUserByEmail(email);
 
-    /**
-     * Handle successful login.
-     */
-    private void loginSuccess(String email) {
-        // Save the user ID (email) in SharedPreferences for session management
-        getSharedPreferences("APP_PREFS", MODE_PRIVATE)
-                .edit()
-                .putString("USER_ID", email)
-                .apply();
+        if (user == null) {
+            new AlertDialog.Builder(LoginActivity.this)
+                    .setTitle("Account Not Found")
+                    .setMessage("No account exists with this email. Would you like to register?")
+                    .setPositiveButton("Register", (dialog, which) -> {
+                        Intent intent = new Intent(LoginActivity.this, RegisterActivity.class);
+                        intent.putExtra("email", email); // Pre-fill email in registration
+                        startActivity(intent);
+                    })
+                    .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
+                    .show();
+            return;
+        }
 
-        // Login successful, navigate to ChatActivity
-        Toast.makeText(getApplicationContext(), "Login successful!", Toast.LENGTH_SHORT).show();
-        Intent intent = new Intent(getApplicationContext(), ChatActivity.class);
-        startActivity(intent);
-        finish(); // Finish LoginActivity
+        // If email exists, verify password
+        if (user.getPassword().equals(password)) {
+            // Save user session
+            getSharedPreferences("UserPrefs", MODE_PRIVATE)
+                    .edit()
+                    .putString("email", email)
+                    .putString("user_id", user.getUserId())
+                    .apply();
+
+            Toast.makeText(getApplicationContext(),
+                    "Login successful!", Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(getApplicationContext(), ChatActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+        } else {
+            new AlertDialog.Builder(LoginActivity.this)
+                    .setTitle("Login Failed")
+                    .setMessage("Incorrect password")
+                    .setPositiveButton("OK", (dialog, which) -> dialog.dismiss())
+                    .show();
+        }
     }
 }

@@ -100,7 +100,7 @@
             app:cornerRadius="20dp" />
 
 
-        <TextView
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/forgotPasswordButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

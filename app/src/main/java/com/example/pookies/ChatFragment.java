@@ -11,6 +11,8 @@ import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -63,10 +65,44 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
         super.onCreate(savedInstanceState);
         messageList = new ArrayList<>();
         dbHelper = new DBHelper(getContext());
-        // Get userId from SharedPreferences or similar storage
-        // For example:
-        userId = getActivity().getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
-                .getString("userId", "");
+
+        // Get userId from SharedPreferences using the correct key
+        if (getActivity() != null) {
+            userId = getActivity().getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+                    .getString("user_id", null); // Changed key from "userId" to "user_id" to match LoginActivity
+
+            if (userId == null) {
+                // Also check email as fallback since it's also stored in LoginActivity
+                String email = getActivity().getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+                        .getString("email", null);
+
+                if (email != null) {
+                    // If we have email but no user_id, try to get user from database
+                    User user = dbHelper.getUserByEmail(email);
+                    if (user != null) {
+                        userId = user.getUserId();
+                        // Store it for future use
+                        getActivity().getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+                                .edit()
+                                .putString("user_id", userId)
+                                .apply();
+                    }
+                }
+            }
+
+            if (userId == null) {
+                Log.e("ChatFragment", "No user ID found!");
+                // Redirect to login
+                Intent intent = new Intent(getActivity(), LoginActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                startActivity(intent);
+                getActivity().finish();
+                return;
+            }
+        } else {
+            Log.e("ChatFragment", "Activity is null!");
+            return;
+        }
 
         Intent intent = new Intent(getContext(), MessagingService.class);
         getActivity().bindService(intent, connection, Context.BIND_AUTO_CREATE);
@@ -110,17 +146,27 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
 
     private void loadChatHistory() {
         messageList.clear();
-        List<Message> messages = dbHelper.getMessages(userId);
-        messageList.addAll(messages);
-        messageAdapter.notifyDataSetChanged();
-        recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
+        if (userId != null && !userId.isEmpty()) {
+            List<Message> messages = dbHelper.getMessages(userId);
+            messageList.addAll(messages);
+            messageAdapter.notifyDataSetChanged();
+            recyclerView.smoothScrollToPosition(messageAdapter.getItemCount());
+        } else {
+            Log.e("ChatFragment", "Cannot load chat history: no user ID");
+        }
     }
     void addToChat(String message, String sentBy) {
-        if (getActivity() != null) {
+        if (getActivity() != null && userId != null && !userId.isEmpty()) {
             getActivity().runOnUiThread(() -> {
                 Message newMessage = new Message(message, sentBy);
+                newMessage.setUserId(userId); // Set the user ID before saving
+
                 // Save message to SQLite
-                dbHelper.insertMessage(newMessage, userId);
+                boolean saved = dbHelper.insertMessage(newMessage, userId);
+                if (!saved) {
+                    Log.e("ChatFragment", "Failed to save message to database");
+                }
+
                 // Update UI
                 messageList.add(newMessage);
                 messageAdapter.notifyItemInserted(messageList.size() - 1);

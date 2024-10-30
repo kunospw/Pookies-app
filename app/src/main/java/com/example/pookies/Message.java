@@ -1,18 +1,35 @@
 package com.example.pookies;
 
 public class Message {
-    public static String SENT_BY_ME = "ME";
-    public static String SENT_BY_BOT = "BOT";
-    public String message;
-    public String sentBy;
+    public static String SENT_BY_ME = "me";
+    public static String SENT_BY_BOT = "bot";
 
-    // Default constructor for Firebase
-    public Message() {
-    }
+    private long id;
+    private String message;
+    private String sentBy;
+    private long timestamp;
+    private String userId;
 
     public Message(String message, String sentBy) {
         this.message = message;
         this.sentBy = sentBy;
+        this.timestamp = System.currentTimeMillis();
+    }
+
+    public Message(long id, String message, String sentBy, long timestamp, String userId) {
+        this.id = id;
+        this.message = message;
+        this.sentBy = sentBy;
+        this.timestamp = timestamp;
+        this.userId = userId;
+    }
+
+    public long getId() {
+        return id;
+    }
+
+    public void setId(long id) {
+        this.id = id;
     }
 
     public String getMessage() {
@@ -29,5 +46,21 @@ public class Message {
 
     public void setSentBy(String sentBy) {
         this.sentBy = sentBy;
+    }
+
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(long timestamp) {
+        this.timestamp = timestamp;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 }

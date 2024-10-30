@@ -1,5 +1,6 @@
 package com.example.pookies;
 
+import android.content.Context;
 import android.content.ContentValues;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
@@ -14,36 +15,31 @@ import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.database.DatabaseReference;
-import com.google.firebase.database.FirebaseDatabase;
-
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
 public class FeedbackFragment extends Fragment {
-    private FirebaseAuth mAuth;
-    private DatabaseReference mDatabase;
     private RadioGroup radioGroup;
     private EditText editTextFeedback;
     private TextView errorTextView;
     private Button submitButton;
     private DBHelper dbHelper;
+    private String userId;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        dbHelper = new DBHelper(getContext()); // Initialize SQLite helper
+        dbHelper = new DBHelper(getContext());
+
+        // Get userId from SharedPreferences
+        userId = requireActivity().getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+                .getString("user_id", "");
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_feedback, container, false);
-
-        mAuth = FirebaseAuth.getInstance();
-        mDatabase = FirebaseDatabase.getInstance().getReference();
 
         // UI element binding
         radioGroup = view.findViewById(R.id.feedbackType);
@@ -55,7 +51,7 @@ public class FeedbackFragment extends Fragment {
         submitButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                submitFeedback(); // Submit feedback
+                submitFeedback();
             }
         });
 
@@ -86,13 +82,12 @@ public class FeedbackFragment extends Fragment {
         RadioButton selectedRadioButton = radioGroup.findViewById(selectedRadioButtonId);
         String feedbackType = selectedRadioButton.getText().toString();
 
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser != null) {
-            // Get user details
-            String userId = currentUser.getUid();
-            String username = currentUser.getDisplayName() != null ? currentUser.getDisplayName() : "Anonymous";
-            String email = currentUser.getEmail() != null ? currentUser.getEmail() : "No Email";
-            String currentTime = getCurrentTime(); // Get current time
+        // Get user details from SQLite database
+        User user = dbHelper.getUserById(userId);
+        if (user != null) {
+            String username = user.getName() != null ? user.getName() : "Anonymous";
+            String email = user.getEmail() != null ? user.getEmail() : "No Email";
+            String currentTime = getCurrentTime();
 
             Feedback feedback = new Feedback(
                     userId,
@@ -103,52 +98,43 @@ public class FeedbackFragment extends Fragment {
                     currentTime
             );
 
-            // Save feedback to Firebase
-            mDatabase.child("feedback").child(userId).push().setValue(feedback)
-                    .addOnCompleteListener(task -> {
-                        if (task.isSuccessful()) {
-                            // Save to SQLite as backup
-                            saveFeedbackToSQLite(feedback);
-                            Toast.makeText(getContext(), "Feedback submitted successfully!", Toast.LENGTH_SHORT).show();
-                            clearForm(); // Clear form after successful submission
-                        } else {
-                            // If Firebase save fails, save feedback locally in SQLite
-                            Toast.makeText(getContext(), "Failed to submit feedback to Firebase. Saving locally.", Toast.LENGTH_SHORT).show();
-                            saveFeedbackToSQLite(feedback);
-                        }
-                    });
+            // Save feedback to SQLite
+            if (saveFeedbackToSQLite(feedback)) {
+                Toast.makeText(getContext(), "Feedback submitted successfully!", Toast.LENGTH_SHORT).show();
+                clearForm();
+            } else {
+                Toast.makeText(getContext(), "Error submitting feedback", Toast.LENGTH_SHORT).show();
+            }
+        } else {
+            Toast.makeText(getContext(), "Error: User not found", Toast.LENGTH_SHORT).show();
         }
     }
 
-    private void saveFeedbackToSQLite(Feedback feedback) {
+    private boolean saveFeedbackToSQLite(Feedback feedback) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
-        ContentValues values = new ContentValues();
+        try {
+            ContentValues values = new ContentValues();
+            values.put(DBHelper.COLUMN_USER_ID, feedback.getUserId());          // Using constant
+            values.put(DBHelper.COLUMN_NAME, feedback.getUsername());           // Using constant
+            values.put(DBHelper.COLUMN_EMAIL, feedback.getEmail());            // Using constant
+            values.put(DBHelper.COLUMN_FEEDBACK_TYPE, feedback.getFeedbackType());
+            values.put(DBHelper.COLUMN_DESCRIPTION, feedback.getDescription());
+            values.put(DBHelper.COLUMN_FEEDBACK_TIME, feedback.getFeedbackTime());
 
-        // Insert feedback data into SQLite database
-        values.put("userId", feedback.getUserId());
-        values.put("username", feedback.getUsername());
-        values.put("email", feedback.getEmail());
-        values.put("feedbackType", feedback.getFeedbackType());
-        values.put("description", feedback.getDescription());
-        values.put("feedbackTime", feedback.getFeedbackTime());
-
-        // Insert feedback data into SQLite and handle possible error
-        long newRowId = db.insert("feedback", null, values);
-        if (newRowId == -1) {
-            Toast.makeText(getContext(), "Error saving feedback locally", Toast.LENGTH_SHORT).show();
-        } else {
-            Toast.makeText(getContext(), "Feedback saved locally", Toast.LENGTH_SHORT).show();
+            long newRowId = db.insert(DBHelper.TABLE_FEEDBACK, null, values);
+            return newRowId != -1;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
         }
     }
 
     private String getCurrentTime() {
-        // Get the current time in a specific format
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
         return sdf.format(new Date());
     }
 
     private void clearForm() {
-        // Clear the form fields after submission
         radioGroup.clearCheck();
         editTextFeedback.setText("");
     }
@@ -157,7 +143,7 @@ public class FeedbackFragment extends Fragment {
     public void onDestroy() {
         super.onDestroy();
         if (dbHelper != null) {
-            dbHelper.close(); // Close database when fragment is destroyed
+            dbHelper.close();
         }
     }
 }
