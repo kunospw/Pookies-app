@@ -273,32 +273,30 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     void callAPI(String question) {
         JSONObject jsonBody = new JSONObject();
         try {
-            JSONObject systemMessage = new JSONObject()
-                    .put("role", "system")
-                    .put("content", "You are a friendly buddy called Pookies. Your main job is to accompany, support, and give positive feedback to the user. " +
-                            "Here are your constraints: 1. Refrain from using any bad words. 2. Avoid talking or engaging in any negative or inappropriate topics, including drugs, explicit content, or NSFW discussions. " +
-                            "3. Keep the user in high spirits and maintain a good mood. 4. Keep the chat casual and fun, adjusting to the latest internet trends and slang. Don't be overly descriptive and sounds unnatural like a bot. Behave humanly as much as possible. " +
-                            "5. Do not be overly excited at the start of the conversation.");
+            // Create the main request body
+            jsonBody.put("model", "gpt-4o");  // Changed from gpt-4o to gpt-4
+            jsonBody.put("messages", new JSONArray()
+                    .put(new JSONObject()
+                            .put("role", "system")
+                            .put("content", "You are a friendly buddy called Pookies. Your main job is to accompany, support, and give positive feedback to the user. " +
+                                    "Here are your constraints: 1. Refrain from using any bad words. 2. Avoid talking or engaging in any negative or inappropriate topics, including drugs, explicit content, or NSFW discussions. " +
+                                    "3. Keep the user in high spirits and maintain a good mood. 4. Keep the chat casual and fun, adjusting to the latest internet trends and slang. Don't be overly descriptive and sounds unnatural like a bot. Behave humanly as much as possible. " +
+                                    "5. Do not be overly excited at the start of the conversation."))
+                    .put(new JSONObject()
+                            .put("role", "user")
+                            .put("content", question)));
 
-            JSONObject userMessage = new JSONObject()
-                    .put("role", "user")
-                    .put("content", question);
-
-            JSONArray messages = new JSONArray()
-                    .put(systemMessage)
-                    .put(userMessage);
-
-            jsonBody.put("model", "llama3-groq-70b-8192-tool-use-preview");
-            jsonBody.put("messages", messages);
+            // Add other parameters
             jsonBody.put("max_tokens", 4000);
             jsonBody.put("temperature", 0.5);
         } catch (JSONException e) {
             e.printStackTrace();
         }
+
         RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
         Request request = new Request.Builder()
-                .url("https://api.groq.com/openai/v1/chat/completions")
-                .header("Authorization", "Bearer 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")
+                .url("https://api.openai.com/v1/chat/completions")  // Updated endpoint for chat completions
+                .header("Authorization", "Bearer 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")
                 .post(body)
                 .build();
 
@@ -316,8 +314,7 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
                         jsonObject = new JSONObject(response.body().string());
                         JSONArray jsonArray = jsonObject.getJSONArray("choices");
                         JSONObject firstChoice = jsonArray.getJSONObject(0);
-                        JSONObject message = firstChoice.getJSONObject("message");
-                        String result = message.getString("content");
+                        String result = firstChoice.getJSONObject("message").getString("content");
                         addResponse(result.trim());
                     } catch (JSONException e) {
                         throw new RuntimeException(e);
