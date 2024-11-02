@@ -51,6 +51,7 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     MessagingService messagingService;
     boolean isBound = false;
     public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
+    private boolean isLoadingHistory = false;
     OkHttpClient client = new OkHttpClient();
     DatabaseReference mDatabase;
     private ServiceConnection connection = new ServiceConnection() {
@@ -207,7 +208,7 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (isBound) {
+        if (isBound && messagingService != null) {
             messagingService.removeMessageListener(this);
             getActivity().unbindService(connection);
             isBound = false;
@@ -215,36 +216,45 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     }
 
     private void loadChatHistory() {
-        messageList.clear();
+        if (isLoadingHistory) return;
+        isLoadingHistory = true;
+
         mDatabase.orderByChild("timestamp").addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                messageList.clear();
+                List<Message> tempList = new ArrayList<>();
                 for (DataSnapshot messageSnapshot : dataSnapshot.getChildren()) {
                     Message message = messageSnapshot.getValue(Message.class);
                     if (message != null) {
-                        messageList.add(message);
+                        tempList.add(message);
                     }
                 }
+
+                messageList.clear();
+                messageList.addAll(tempList);
                 messageAdapter.notifyDataSetChanged();
+
                 if (!messageList.isEmpty()) {
                     recyclerView.smoothScrollToPosition(messageList.size() - 1);
                 }
+                isLoadingHistory = false;
             }
 
             @Override
             public void onCancelled(@NonNull DatabaseError databaseError) {
+                isLoadingHistory = false;
                 Toast.makeText(getContext(), "Failed to load messages: " + databaseError.getMessage(),
                         Toast.LENGTH_SHORT).show();
             }
         });
     }
+
     void addToChat(String message, String sentBy) {
         if (getActivity() != null) {
             getActivity().runOnUiThread(() -> {
                 Message newMessage = new Message(message, sentBy);
 
-                // Save message to Firebase
+                // Only save to Firebase, let the MessagingService handle the updates
                 String messageId = mDatabase.push().getKey();
                 if (messageId != null) {
                     mDatabase.child(messageId).setValue(newMessage)
@@ -256,11 +266,6 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
                                 Toast.makeText(getContext(), "Failed to send message: " + e.getMessage(),
                                         Toast.LENGTH_SHORT).show();
                             });
-                }
-
-                // Send message through MessagingService
-                if (isBound) {
-                    messagingService.sendMessage(newMessage);
                 }
             });
         }

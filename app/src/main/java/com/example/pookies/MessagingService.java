@@ -3,20 +3,26 @@ package com.example.pookies;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Binder;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.*;
+
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MessagingService extends Service {
-    private final IBinder binder = new LocalBinder();
+    private final Map<String, WeakReference<MessageListener>> listenerMap = new ConcurrentHashMap<>();
     private DatabaseReference mDatabase;
-    private List<MessageListener> listeners = new ArrayList<>();
     private FirebaseAuth mAuth;
 
     public class LocalBinder extends Binder {
@@ -37,21 +43,13 @@ public class MessagingService extends Service {
         }
     }
 
-    @Nullable
-    @Override
-    public IBinder onBind(Intent intent) {
-        return binder;
-    }
-
     private void listenForNewMessages() {
         mDatabase.addChildEventListener(new ChildEventListener() {
             @Override
             public void onChildAdded(@NonNull DataSnapshot dataSnapshot, @Nullable String previousChildName) {
                 Message message = dataSnapshot.getValue(Message.class);
                 if (message != null) {
-                    for (MessageListener listener : listeners) {
-                        listener.onNewMessage(message);
-                    }
+                    notifyListeners(message);
                 }
             }
 
@@ -69,6 +67,45 @@ public class MessagingService extends Service {
         });
     }
 
+    public void addMessageListener(MessageListener listener) {
+        if (listener != null) {
+            String key = listener.toString(); // Use object's toString as unique identifier
+            listenerMap.put(key, new WeakReference<>(listener));
+        }
+    }
+
+    public void removeMessageListener(MessageListener listener) {
+        if (listener != null) {
+            String key = listener.toString();
+            listenerMap.remove(key);
+        }
+    }
+
+    private void notifyListeners(Message message) {
+        // Create a new ArrayList to avoid ConcurrentModificationException
+        List<String> deadReferences = new ArrayList<>();
+
+        for (Map.Entry<String, WeakReference<MessageListener>> entry : listenerMap.entrySet()) {
+            WeakReference<MessageListener> weakRef = entry.getValue();
+            MessageListener listener = weakRef.get();
+
+            if (listener == null) {
+                // Mark this reference for removal
+                deadReferences.add(entry.getKey());
+            } else {
+                // Notify the listener on the main thread
+                new Handler(Looper.getMainLooper()).post(() ->
+                        listener.onNewMessage(message)
+                );
+            }
+        }
+
+        // Remove dead references
+        for (String key : deadReferences) {
+            listenerMap.remove(key);
+        }
+    }
+
     public void sendMessage(Message message) {
         if (mDatabase != null) {
             String messageId = mDatabase.push().getKey();
@@ -78,12 +115,10 @@ public class MessagingService extends Service {
         }
     }
 
-    public void addMessageListener(MessageListener listener) {
-        listeners.add(listener);
-    }
-
-    public void removeMessageListener(MessageListener listener) {
-        listeners.remove(listener);
+    @Nullable
+    @Override
+    public IBinder onBind(Intent intent) {
+        return new LocalBinder();
     }
 
     public interface MessageListener {

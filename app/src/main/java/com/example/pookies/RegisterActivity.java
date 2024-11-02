@@ -17,6 +17,7 @@ import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.UserProfileChangeRequest;
 
 public class RegisterActivity extends AppCompatActivity {
@@ -78,29 +79,29 @@ public class RegisterActivity extends AppCompatActivity {
 
         // Register user with Firebase
         mAuth.createUserWithEmailAndPassword(email, password)
-                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            // Firebase registration successful, update Firebase profile
+                .addOnCompleteListener(this, task -> {
+                    if (task.isSuccessful()) {
+                        FirebaseUser user = mAuth.getCurrentUser();
+                        if (user != null) {
+                            // Update Firebase profile
                             updateFirebaseProfile(name);
 
-                            // Save user ID in SharedPreferences for session management
-                            getSharedPreferences("APP_PREFS", MODE_PRIVATE)
-                                    .edit()
-                                    .putString("USER_ID", mAuth.getCurrentUser().getUid())
-                                    .apply();
+                            // Create session directly after registration
+                            SessionManager sessionManager = SessionManager.getInstance(this);
+                            sessionManager.createLoginSession(user.getEmail(), user.getUid());
 
                             Toast.makeText(RegisterActivity.this, "Registration successful", Toast.LENGTH_SHORT).show();
 
-                            // Redirect to LoginActivity
-                            Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
+                            // Redirect directly to ChatActivity
+                            Intent intent = new Intent(RegisterActivity.this, ChatActivity.class);
+                            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                             startActivity(intent);
                             finish();
-                        } else {
-                            // Firebase registration failed
-                            Toast.makeText(RegisterActivity.this, "Registration failed: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
                         }
+                    } else {
+                        Toast.makeText(RegisterActivity.this,
+                                "Registration failed: " + task.getException().getMessage(),
+                                Toast.LENGTH_SHORT).show();
                     }
                 });
     }

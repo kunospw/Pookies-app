@@ -61,30 +61,21 @@ public class ChatActivity extends AppCompatActivity {
         setContentView(R.layout.activity_chat);
         checkBluetoothPermission();
 
+        // Initialize SessionManager first
+        sessionManager = SessionManager.getInstance(this);
+        sessionManager.checkLogin(); // This will redirect to login if not logged in
+
         // Initialize Firebase components
         firebaseAuth = FirebaseAuth.getInstance();
         storage = FirebaseStorage.getInstance();
         storageRef = storage.getReference();
         userRef = FirebaseDatabase.getInstance().getReference("users");
 
-        // Initialize SessionManager
-        sessionManager = SessionManager.getInstance(this);
-        sessionManager.checkLogin();
-
         FirebaseUser currentUser = firebaseAuth.getCurrentUser();
         if (currentUser != null) {
-            String firebaseUserID = currentUser.getUid();
-            String email = currentUser.getEmail();
-
-            // Save both ID and email to SharedPreferences
-            SharedPreferences prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);
-            SharedPreferences.Editor editor = prefs.edit();
-            editor.putString("USER_ID", firebaseUserID);
-            editor.putString("USER_EMAIL", email);
-            editor.apply();
-
             initializeUI();
             updateDrawerHeader();
+            setupNavigationDrawer();
 
             View.OnClickListener profileClickListener = view -> {
                 loadProfileFragment();
@@ -92,15 +83,11 @@ public class ChatActivity extends AppCompatActivity {
             };
             userImage.setOnClickListener(profileClickListener);
             textUsername.setOnClickListener(profileClickListener);
-
+            if (savedInstanceState == null) {
+                loadFragment(new ChatFragment());
+            }
         } else {
-            redirectToLogin();
-        }
-
-        setupNavigationDrawer();
-
-        if (savedInstanceState == null) {
-            loadFragment(new ChatFragment());
+            sessionManager.logoutUser(); // This will handle the redirection
         }
     }
 
@@ -187,31 +174,6 @@ public class ChatActivity extends AppCompatActivity {
             userImage.setImageResource(R.drawable.baseline_person_24);
         });
     }
-
-    private void loadImageWithGlide(Object imageSource) {
-        Glide.with(this)
-                .load(imageSource)
-                .apply(RequestOptions.circleCropTransform())
-                .signature(new ObjectKey(System.currentTimeMillis())) // Add a unique signature to force refresh
-                .placeholder(R.drawable.baseline_person_24)
-                .error(R.drawable.baseline_person_24)
-                .listener(new RequestListener<Drawable>() {
-                    @Override
-                    public boolean onLoadFailed(@Nullable GlideException e, Object model, Target<Drawable> target, boolean isFirstResource) {
-                        Log.e(TAG, "onLoadFailed: Failed to load image with Glide", e);
-                        return false;
-                    }
-
-                    @Override
-                    public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
-                        Log.d(TAG, "onResourceReady: Image loaded successfully with Glide");
-                        return false;
-                    }
-                })
-                .into(userImage);
-    }
-
-
     public void refreshHeader() {
         Log.d(TAG, "refreshHeader: Refreshing header");
         runOnUiThread(() -> {
