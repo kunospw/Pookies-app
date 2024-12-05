@@ -163,9 +163,18 @@ public class SessionManager {
         return pref.getString(KEY_USER_ID, null);
     }
 
-    public FirebaseUser getCurrentUser() {
-        return isLoggedIn() ? firebaseAuth.getCurrentUser() : null;
+    public User getCurrentUser() {
+        String userId = getUserId(); // Use session-stored UID
+        String username = getUserName(); // Use session-stored username
+        String email = getUserEmail(); // Use session-stored email
+
+        if (userId != null && username != null && email != null) {
+            return new User(userId, email, username); // Use the User constructor
+        }
+        return null; // Return null if user details are incomplete
     }
+
+
 
     public String getProfilePictureUri() {
         String userId = getUserId(); // Fetch the currently logged-in user's ID

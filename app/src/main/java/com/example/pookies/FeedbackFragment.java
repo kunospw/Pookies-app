@@ -10,7 +10,6 @@ import android.widget.EditText;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -48,12 +47,7 @@ public class FeedbackFragment extends Fragment {
         submitButton = view.findViewById(R.id.submitButton);
 
         // Set button listener
-        submitButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                submitFeedback(); // Submit feedback
-            }
-        });
+        submitButton.setOnClickListener(v -> submitFeedback());
 
         return view;
     }
@@ -61,55 +55,71 @@ public class FeedbackFragment extends Fragment {
     private void submitFeedback() {
         int selectedRadioButtonId = radioGroup.getCheckedRadioButtonId();
 
-        // Check if a feedback type is selected
+        // Validate feedback type selection
         if (selectedRadioButtonId == -1) {
-            errorTextView.setVisibility(View.VISIBLE);
-            errorTextView.setText("Please select a feedback type.");
+            showError("Please select a feedback type.");
             return;
         }
 
-        // Get feedback text and check if it's at least 5 words
+        // Validate feedback description
         String feedbackDescription = editTextFeedback.getText().toString().trim();
-        if (feedbackDescription.split("\\s+").length < 5) {
-            errorTextView.setVisibility(View.VISIBLE);
-            errorTextView.setText("Please put at least 5 words.");
-            return;
+        if (!isValidFeedback(feedbackDescription)) {
+            return; // Error is already displayed in isValidFeedback
         }
 
-        // If validation passes, hide error messages
+        // Hide error messages on valid input
         errorTextView.setVisibility(View.GONE);
 
+        // Get feedback type
         RadioButton selectedRadioButton = radioGroup.findViewById(selectedRadioButtonId);
         String feedbackType = selectedRadioButton.getText().toString();
 
+        // Fetch user details from Firebase Authentication
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser != null) {
-            // Get user details
             String userId = currentUser.getUid();
             String username = currentUser.getDisplayName() != null ? currentUser.getDisplayName() : "Anonymous";
             String email = currentUser.getEmail() != null ? currentUser.getEmail() : "No Email";
-            String currentTime = getCurrentTime(); // Get current time
+            String currentTime = getCurrentTime();
 
-            Feedback feedback = new Feedback(
-                    userId,
-                    username,
-                    email,
-                    feedbackType,
-                    feedbackDescription,
-                    currentTime
-            );
+            // Create feedback object
+            Feedback feedback = new Feedback(userId, username, email, feedbackType, feedbackDescription, currentTime);
 
-            // Save feedback to Firebase
+            // Save feedback to the user's node only
             mDatabase.child("feedback").child(userId).push().setValue(feedback)
                     .addOnCompleteListener(task -> {
                         if (task.isSuccessful()) {
-                            Toast.makeText(getContext(), "Feedback submitted successfully!", Toast.LENGTH_SHORT).show();
+                            showSuccess("Feedback submitted successfully!");
                             clearForm();
                         } else {
-                            Toast.makeText(getContext(), "Failed to submit feedback. Please try again.", Toast.LENGTH_SHORT).show();
+                            showError("Failed to submit feedback. Please try again.");
                         }
                     });
+        } else {
+            showError("You must be logged in to submit feedback.");
         }
+    }
+
+    private boolean isValidFeedback(String feedbackDescription) {
+        if (feedbackDescription.isEmpty()) {
+            showError("Feedback description cannot be empty.");
+            return false;
+        }
+        if (feedbackDescription.split("\\s+").length < 5) {
+            showError("Please put at least 5 words in the feedback.");
+            return false;
+        }
+        return true;
+    }
+
+    private void showError(String message) {
+        errorTextView.setVisibility(View.VISIBLE);
+        errorTextView.setText(message);
+    }
+
+    private void showSuccess(String message) {
+        errorTextView.setVisibility(View.VISIBLE);
+        errorTextView.setText(message);
     }
 
     private String getCurrentTime() {

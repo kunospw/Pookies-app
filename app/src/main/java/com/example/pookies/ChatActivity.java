@@ -265,25 +265,38 @@ public class ChatActivity extends AppCompatActivity {
         // Sign out from Firebase
         firebaseAuth.signOut();
 
-        // Clear preferences
-        getSharedPreferences("APP_PREFS", MODE_PRIVATE)
-                .edit()
-                .clear()
-                .apply();
+        // Clear preferences before redirecting
+        SharedPreferences sharedPreferences = getSharedPreferences("APP_PREFS", MODE_PRIVATE);
+        if (sharedPreferences != null) {
+            sharedPreferences.edit()
+                    .clear()
+                    .apply();
+        }
 
         // Let session manager handle additional cleanup
-        sessionManager.logoutUser();
+        if (sessionManager != null) {
+            sessionManager.logoutUser();
+        }
 
-        Toast.makeText(ChatActivity.this, "You have been logged out", Toast.LENGTH_SHORT).show();
+        // Show a logout confirmation before redirecting
+        Toast.makeText(this, "You have been logged out", Toast.LENGTH_SHORT).show();
+
+        // Redirect to Login
         redirectToLogin();
     }
 
+
     private void redirectToLogin() {
-        Intent intent = new Intent(ChatActivity.this, MainActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-        finish();
+        if (this != null) { // Ensure the context (activity) is valid
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish(); // End the current activity to prevent further interaction
+        } else {
+            Log.e(TAG, "redirectToLogin: Context is null, cannot redirect.");
+        }
     }
+
     @Override
     protected void onResume() {
         super.onResume();
