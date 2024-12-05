@@ -14,6 +14,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -52,6 +53,7 @@ public class ChatActivity extends AppCompatActivity {
     FirebaseStorage storage;
     StorageReference storageRef;
     DatabaseReference userRef;
+
     FirebaseAuth firebaseAuth;
 
 
@@ -69,7 +71,7 @@ public class ChatActivity extends AppCompatActivity {
         firebaseAuth = FirebaseAuth.getInstance();
         storage = FirebaseStorage.getInstance();
         storageRef = storage.getReference();
-        userRef = FirebaseDatabase.getInstance().getReference("users");
+        userRef = FirebaseDatabase.getInstance().getReference("user-info");
 
         FirebaseUser currentUser = firebaseAuth.getCurrentUser();
         if (currentUser != null) {
@@ -107,19 +109,17 @@ public class ChatActivity extends AppCompatActivity {
     private void loadProfilePicture() {
         FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
         if (currentUser != null) {
-            SharedPreferences prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);
-            String profilePicUri = prefs.getString("PROFILE_PIC_URI_" + currentUser.getUid(), null);
+            String profilePicUri = sessionManager.getProfilePictureUri();
             if (profilePicUri != null) {
-                // Load the image from URI
                 userImage.setImageURI(Uri.parse(profilePicUri));
             } else {
-                // Set a default profile image if no URI is found
                 userImage.setImageResource(R.drawable.person); // Default image resource
             }
         } else {
             userImage.setImageResource(R.drawable.person); // Default image if user is not logged in
         }
     }
+
     public void updateDrawerHeader() {
         Log.d(TAG, "updateDrawerHeader: Updating drawer header");
         FirebaseUser currentUser = firebaseAuth.getCurrentUser();
@@ -127,10 +127,35 @@ public class ChatActivity extends AppCompatActivity {
             // Set email directly from FirebaseAuth
             textEmail.setText(currentUser.getEmail());
 
-            // Set display name from FirebaseAuth, or email as fallback
-            String displayName = currentUser.getDisplayName();
-            textUsername.setText(displayName != null && !displayName.isEmpty() ?
-                    displayName : currentUser.getEmail());
+            // Use cached username for immediate display
+            String cachedUserName = sessionManager.getUserName();
+            textUsername.setText(cachedUserName != null ? cachedUserName : "Loading...");
+
+            // Fetch the latest username from Firebase Realtime Database
+            DatabaseReference userInfoRef = FirebaseDatabase.getInstance().getReference("user-info").child(currentUser.getUid());
+            userInfoRef.addListenerForSingleValueEvent(new ValueEventListener() {
+                @Override
+                public void onDataChange(@NonNull DataSnapshot snapshot) {
+                    if (snapshot.exists() && snapshot.child("name").getValue() != null) {
+                        String updatedUserName = snapshot.child("name").getValue(String.class);
+                        textUsername.setText(updatedUserName);
+
+                        // Update SessionManager with the latest username
+                        sessionManager.createLoginSession(
+                                currentUser.getEmail(),
+                                currentUser.getUid(),
+                                updatedUserName
+                        );
+                    } else {
+                        Log.w(TAG, "updateDrawerHeader: Username not found in database.");
+                    }
+                }
+
+                @Override
+                public void onCancelled(@NonNull DatabaseError error) {
+                    Log.e(TAG, "Failed to fetch username from database: " + error.getMessage());
+                }
+            });
 
             // Load profile picture
             loadProfilePicture(currentUser.getUid(), currentUser.getEmail());
@@ -138,6 +163,7 @@ public class ChatActivity extends AppCompatActivity {
             Log.e(TAG, "updateDrawerHeader: Current Firebase user is null");
         }
     }
+
     private void loadProfilePicture(String uid, String email) {
         if (uid != null) {
             loadProfilePictureFromFirebase(uid);

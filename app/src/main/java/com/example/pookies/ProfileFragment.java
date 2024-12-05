@@ -111,9 +111,11 @@ public class ProfileFragment extends Fragment {
 
     private void loadUserData() {
         FirebaseUser firebaseUser = mAuth.getCurrentUser();
+        SessionManager sessionManager = SessionManager.getInstance(getContext());
+
         if (firebaseUser != null) {
-            emailEditText.setText(firebaseUser.getEmail());
-            usernameEditText.setText(firebaseUser.getDisplayName());
+            emailEditText.setText(sessionManager.getUserEmail());
+            usernameEditText.setText(sessionManager.getUserName());
             loadProfilePicture(firebaseUser.getUid());
             passwordEditText.setText("********");
         } else {
@@ -122,18 +124,31 @@ public class ProfileFragment extends Fragment {
     }
 
     private void loadProfilePicture(String uid) {
-        StorageReference profilePicRef = storageRef.child("profile_pictures").child(uid).child("profile.jpg");
-        profilePicRef.getDownloadUrl().addOnSuccessListener(uri -> {
+        String cachedUri = SessionManager.getInstance(getContext()).getProfilePictureUri();
+        if (cachedUri != null) {
             Glide.with(this)
-                    .load(uri)
+                    .load(cachedUri)
                     .placeholder(R.drawable.baseline_person_24)
                     .error(R.drawable.baseline_person_24)
                     .signature(new ObjectKey(System.currentTimeMillis()))
                     .into(profileImageView);
-        }).addOnFailureListener(e -> {
-            profileImageView.setImageResource(R.drawable.baseline_person_24);
-        });
+        } else {
+            StorageReference profilePicRef = storageRef.child("profile_pictures").child(uid).child("profile.jpg");
+            profilePicRef.getDownloadUrl().addOnSuccessListener(uri -> {
+                // Cache URI in SessionManager
+                SessionManager.getInstance(getContext()).saveProfilePictureUri(uri.toString());
+
+                Glide.with(this)
+                        .load(uri)
+                        .placeholder(R.drawable.baseline_person_24)
+                        .error(R.drawable.baseline_person_24)
+                        .into(profileImageView);
+            }).addOnFailureListener(e -> {
+                profileImageView.setImageResource(R.drawable.baseline_person_24);
+            });
+        }
     }
+
 
     private void showImagePickerDialog() {
         CharSequence[] options = {"Take Photo", "Choose from Gallery", "Remove Profile Picture"};
@@ -175,7 +190,8 @@ public class ProfileFragment extends Fragment {
         if (user != null && user.getUid() != null) {
             StorageReference profilePicRef = storageRef.child("profile_pictures").child(user.getUid()).child("profile.jpg");
             profilePicRef.delete().addOnSuccessListener(aVoid -> {
-                Log.d("ProfilePicture", "Profile picture deleted from Firebase Storage");
+                // Clear cached URI
+                SessionManager.getInstance(getContext()).clearProfilePictureUri();
 
                 // Update Firebase user profile
                 UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
@@ -183,28 +199,24 @@ public class ProfileFragment extends Fragment {
                         .build();
                 user.updateProfile(profileUpdates).addOnCompleteListener(task -> {
                     if (task.isSuccessful()) {
-                        Log.d("ProfilePicture", "User profile updated.");
-                        // Update UI
                         profileImageView.setImageResource(R.drawable.baseline_person_24);
-                        // Notify ChatActivity to refresh the header
+
+                        // Notify ChatActivity
                         if (getActivity() instanceof ChatActivity) {
                             ((ChatActivity) getActivity()).refreshHeader();
                         }
                         Toast.makeText(getActivity(), "Profile picture removed", Toast.LENGTH_SHORT).show();
                     } else {
-                        Log.e("ProfilePicture", "Failed to update user profile", task.getException());
                         Toast.makeText(getActivity(), "Failed to remove profile picture", Toast.LENGTH_SHORT).show();
                     }
                 });
             }).addOnFailureListener(e -> {
-                Log.e("ProfilePicture", "Failed to delete profile picture from Firebase Storage", e);
                 Toast.makeText(getActivity(), "Failed to remove profile picture", Toast.LENGTH_SHORT).show();
             });
         } else {
             Toast.makeText(getActivity(), "User not logged in", Toast.LENGTH_SHORT).show();
         }
     }
-
     private void showChangePasswordDialog() {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_change_password, null);
         TextInputEditText currentPasswordInput = dialogView.findViewById(R.id.currentPassword);
@@ -464,4 +476,16 @@ public class ProfileFragment extends Fragment {
             Toast.makeText(getActivity(), "User not logged in", Toast.LENGTH_SHORT).show();
         }
     }
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == CAMERA_PERMISSION_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                openCamera();
+            } else {
+                Toast.makeText(getActivity(), "Camera permission is required to take a photo", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
 }
