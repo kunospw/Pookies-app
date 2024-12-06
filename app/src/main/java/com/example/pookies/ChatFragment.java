@@ -26,6 +26,9 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -53,6 +56,7 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     OkHttpClient client = new OkHttpClient();
     DatabaseReference mDatabase;
+    String userProfileUri;
     private ServiceConnection connection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName className, IBinder service) {
@@ -74,28 +78,32 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
         messageList = new ArrayList<>();
         mAuth = FirebaseAuth.getInstance();
         FirebaseUser user = mAuth.getCurrentUser();
+
         if (user != null) {
             userId = user.getUid();
             mDatabase = FirebaseDatabase.getInstance().getReference("users").child(userId).child("messages");
+
+            // Fetch the profile picture dynamically
+            fetchUserProfilePicture();
         }
+
         Intent intent = new Intent(getContext(), MessagingService.class);
         getActivity().bindService(intent, connection, Context.BIND_AUTO_CREATE);
     }
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
-                             Bundle savedInstanceState) {
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_chat, container, false);
         recyclerView = view.findViewById(R.id.recycler_view);
         messageEditText = view.findViewById(R.id.message_edit_text);
         sendButton = view.findViewById(R.id.send_btn);
 
-        // Create adapter with click listener
-        messageAdapter = new MessageAdapter(messageList, new MessageAdapter.MessageClickListener() {
+        // Initialize adapter
+        messageAdapter = new MessageAdapter(getContext(), messageList, new MessageAdapter.MessageClickListener() {
             @Override
             public void onMessageClick(View view, Message message, int position) {
                 showMessageOptions(view, message, position);
             }
-        });
+        }, userProfileUri); // Pass the userProfileUri
 
         recyclerView.setAdapter(messageAdapter);
         LinearLayoutManager llm = new LinearLayoutManager(getContext());
@@ -113,6 +121,7 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
 
         return view;
     }
+
     private void showMessageOptions(View view, Message message, int position) {
         PopupMenu popup = new PopupMenu(getContext(), view);
         popup.getMenuInflater().inflate(R.menu.message_options_menu, popup.getMenu());
@@ -203,7 +212,57 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
                     }
                 });
     }
+    private void fetchUserProfilePicture() {
+        DatabaseReference userInfoRef = FirebaseDatabase.getInstance().getReference("user-info").child(userId);
 
+        userInfoRef.addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                if (snapshot.exists() && snapshot.hasChild("profilePicUrl")) {
+                    String profilePicUrl = snapshot.child("profilePicUrl").getValue(String.class);
+                    if (profilePicUrl != null && !profilePicUrl.isEmpty()) {
+                        userProfileUri = profilePicUrl; // Use the new structure
+                        initializeAdapter();
+                    } else {
+                        fetchProfilePictureFromStorage(); // Fallback to old structure
+                    }
+                } else {
+                    fetchProfilePictureFromStorage(); // Fallback to old structure
+                }
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {
+                Toast.makeText(getContext(), "Failed to fetch profile picture: " + error.getMessage(), Toast.LENGTH_SHORT).show();
+                initializeAdapter(); // Use default placeholder
+            }
+        });
+    }
+
+    private void fetchProfilePictureFromStorage() {
+        StorageReference profilePicRef = FirebaseStorage.getInstance()
+                .getReference("profile_pictures/" + userId + "/profile.jpg");
+
+        profilePicRef.getDownloadUrl().addOnSuccessListener(uri -> {
+            userProfileUri = uri.toString(); // Use the old structure
+            initializeAdapter();
+        }).addOnFailureListener(e -> {
+            userProfileUri = null; // Use default placeholder
+            initializeAdapter();
+        });
+    }
+    private void initializeAdapter() {
+        messageAdapter = new MessageAdapter(getContext(), messageList, (view, message, position) -> {
+            showMessageOptions(view, message, position);
+        }, userProfileUri);
+
+        recyclerView.setAdapter(messageAdapter);
+        LinearLayoutManager llm = new LinearLayoutManager(getContext());
+        llm.setStackFromEnd(true);
+        recyclerView.setLayoutManager(llm);
+
+        loadChatHistory();
+    }
     @Override
     public void onDestroy() {
         super.onDestroy();
@@ -234,8 +293,7 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
 
             @Override
             public void onCancelled(@NonNull DatabaseError databaseError) {
-                Toast.makeText(getContext(), "Failed to load messages: " + databaseError.getMessage(),
-                        Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), "Failed to load messages: " + databaseError.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -296,7 +354,7 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
         RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
         Request request = new Request.Builder()
                 .url("https://api.openai.com/v1/chat/completions")  // Updated endpoint for chat completions
-                .header("Authorization", "Bearer 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")
+                .header("Authorization", "Bearer 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")
                 .post(body)
                 .build();
 
