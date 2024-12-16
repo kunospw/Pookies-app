@@ -41,12 +41,19 @@ import com.google.firebase.auth.EmailAuthProvider;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.UserProfileChangeRequest;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 import com.google.firebase.storage.UploadTask;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class ProfileFragment extends Fragment {
 
@@ -112,14 +119,44 @@ public class ProfileFragment extends Fragment {
     private void loadUserData() {
         FirebaseUser firebaseUser = mAuth.getCurrentUser();
         if (firebaseUser != null) {
-            emailEditText.setText(firebaseUser.getEmail());
-            usernameEditText.setText(firebaseUser.getDisplayName());
-            loadProfilePicture(firebaseUser.getUid());
-            passwordEditText.setText("********");
+            String uid = firebaseUser.getUid();
+
+            // Fetch and display data from the `info` table
+            DatabaseReference infoRef = FirebaseDatabase.getInstance()
+                    .getReference("users").child(uid).child("info");
+            infoRef.addListenerForSingleValueEvent(new ValueEventListener() {
+                @Override
+                public void onDataChange(@NonNull DataSnapshot snapshot) {
+                    if (snapshot.exists()) {
+                        String name = snapshot.child("name").getValue(String.class);
+                        String email = snapshot.child("email").getValue(String.class);
+                        String password = snapshot.child("password").getValue(String.class);
+
+                        // Update UI fields with data from the `info` table
+                        usernameEditText.setText(name != null ? name : "Unknown");
+                        emailEditText.setText(email != null ? email : "Unknown");
+                        passwordEditText.setText(password != null ? "********" : "N/A");
+                    } else {
+                        // Fallback to FirebaseUser data if `info` table is not found
+                        usernameEditText.setText(firebaseUser.getDisplayName());
+                        emailEditText.setText(firebaseUser.getEmail());
+                        passwordEditText.setText("********");
+                    }
+                }
+
+                @Override
+                public void onCancelled(@NonNull DatabaseError error) {
+                    Toast.makeText(getActivity(), "Failed to load user info: " + error.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
+
+            // Load profile picture from storage
+            loadProfilePicture(uid);
         } else {
             navigateToLogin();
         }
     }
+
 
     private void loadProfilePicture(String uid) {
         StorageReference profilePicRef = storageRef.child("profile_pictures").child(uid).child("profile.jpg");
@@ -257,6 +294,7 @@ public class ProfileFragment extends Fragment {
                             firebaseUser.updatePassword(newPassword)
                                     .addOnCompleteListener(task1 -> {
                                         if (task1.isSuccessful()) {
+                                            updatePasswordInDatabase(firebaseUser.getUid(), newPassword);
                                             Toast.makeText(getActivity(), "Password updated successfully", Toast.LENGTH_SHORT).show();
                                             dialog.dismiss();
                                         } else {
@@ -268,6 +306,23 @@ public class ProfileFragment extends Fragment {
                         }
                     });
         }
+    }
+
+    private void updatePasswordInDatabase(String userId, String newPassword) {
+        DatabaseReference userInfoRef = FirebaseDatabase.getInstance()
+                .getReference("users").child(userId).child("info");
+
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("password", newPassword); // Note: Store a hash instead for better security!
+
+        userInfoRef.updateChildren(updates)
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        Log.d("ProfileFragment", "Password updated in the database.");
+                    } else {
+                        Log.e("ProfileFragment", "Failed to update password in database.", task.getException());
+                    }
+                });
     }
 
     private void showEditProfileDialog() {

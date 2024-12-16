@@ -1,37 +1,39 @@
 package com.example.pookies;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.TextUtils;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
-import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.UserProfileChangeRequest;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class RegisterActivity extends AppCompatActivity {
 
-    EditText etEmail, etName, etPassword, etConfirmPassword;
-    Button btnSignUp;
-    TextView tvAlreadyHaveAccount;
-    FirebaseAuth mAuth;
+    private EditText etEmail, etName, etPassword, etConfirmPassword;
+    private Button btnSignUp;
+    private TextView tvAlreadyHaveAccount;
+
+    private FirebaseAuth mAuth;
+    private DatabaseReference usersDatabaseRef;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_register);
 
-        mAuth = FirebaseAuth.getInstance();  // Initialize Firebase Auth
+        mAuth = FirebaseAuth.getInstance();
+        usersDatabaseRef = FirebaseDatabase.getInstance().getReference("users"); // Reference to 'users' table
 
         // Initialize views
         etEmail = findViewById(R.id.emailInput);
@@ -42,21 +44,13 @@ public class RegisterActivity extends AppCompatActivity {
         tvAlreadyHaveAccount = findViewById(R.id.alreadyHaveAccount);
 
         // Navigate to LoginActivity if user already has an account
-        tvAlreadyHaveAccount.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
-                startActivity(intent);
-            }
+        tvAlreadyHaveAccount.setOnClickListener(v -> {
+            Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
+            startActivity(intent);
         });
 
         // Register user when sign up button is clicked
-        btnSignUp.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                registerUser();
-            }
-        });
+        btnSignUp.setOnClickListener(v -> registerUser());
     }
 
     private void registerUser() {
@@ -78,47 +72,43 @@ public class RegisterActivity extends AppCompatActivity {
 
         // Register user with Firebase
         mAuth.createUserWithEmailAndPassword(email, password)
-                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            // Firebase registration successful, update Firebase profile
-                            updateFirebaseProfile(name);
-
-                            // Save user ID in SharedPreferences for session management
-                            getSharedPreferences("APP_PREFS", MODE_PRIVATE)
-                                    .edit()
-                                    .putString("USER_ID", mAuth.getCurrentUser().getUid())
-                                    .apply();
-
-                            Toast.makeText(RegisterActivity.this, "Registration successful", Toast.LENGTH_SHORT).show();
-
-                            // Redirect to LoginActivity
-                            Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
-                            startActivity(intent);
-                            finish();
-                        } else {
-                            // Firebase registration failed
-                            Toast.makeText(RegisterActivity.this, "Registration failed: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
+                .addOnCompleteListener(this, task -> {
+                    if (task.isSuccessful()) {
+                        // Firebase registration successful
+                        FirebaseUser user = mAuth.getCurrentUser();
+                        if (user != null) {
+                            saveUserData(user.getUid(), name, email, password); // Save user info in database
                         }
+                    } else {
+                        // Firebase registration failed
+                        Toast.makeText(RegisterActivity.this, "Registration failed: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
                     }
                 });
     }
 
-    // Update Firebase profile with the user's name
-    private void updateFirebaseProfile(String name) {
-        UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
-                .setDisplayName(name)
-                .build();
+    private void saveUserData(String userId, String name, String email, String password) {
+        // Prepare user data to be saved
+        Map<String, Object> userData = new HashMap<>();
+        userData.put("name", name);
+        userData.put("email", email);
+        userData.put("profilePicture", null);
+        userData.put("password", password);
 
-        mAuth.getCurrentUser().updateProfile(profileUpdates)
-                .addOnCompleteListener(new OnCompleteListener<Void>() {
-                    @Override
-                    public void onComplete(@NonNull Task<Void> task) {
-                        if (!task.isSuccessful()) {
-                            Toast.makeText(RegisterActivity.this, "Failed to update profile", Toast.LENGTH_SHORT).show();
-                        }
+        // Save user data under 'users/{userId}/info'
+        usersDatabaseRef.child(userId).child("info").setValue(userData)
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        Toast.makeText(RegisterActivity.this, "Registration successful", Toast.LENGTH_SHORT).show();
+                        redirectToLogin();
+                    } else {
+                        Toast.makeText(RegisterActivity.this, "Failed to save user data", Toast.LENGTH_SHORT).show();
                     }
                 });
+    }
+
+    private void redirectToLogin() {
+        Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
+        startActivity(intent);
+        finish();
     }
 }

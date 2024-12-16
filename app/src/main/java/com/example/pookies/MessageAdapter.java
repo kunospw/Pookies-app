@@ -68,30 +68,67 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MyViewHo
             holder.leftChatView.setVisibility(View.GONE);
             holder.rightChatView.setVisibility(View.VISIBLE);
 
-            holder.rightTextView.setText(message.getMessage());
+            if (message.getImageUrl() != null) {
+                // Show image with optional caption
+                holder.rightTextView.setVisibility(View.GONE);
+                holder.rightImageView.setVisibility(View.VISIBLE);
+                holder.rightCaptionTextView.setVisibility(View.VISIBLE);
 
-            // Load user profile picture or default placeholder
+                Glide.with(context)
+                        .load(message.getImageUrl())
+                        .placeholder(R.drawable.placeholder_image)  // Add a placeholder image
+                        .into(holder.rightImageView);
+
+                holder.rightCaptionTextView.setText(message.getCaption() != null ? message.getCaption() : "");
+            } else {
+                // Show text-only message
+                holder.rightImageView.setVisibility(View.GONE);
+                holder.rightCaptionTextView.setVisibility(View.GONE);
+                holder.rightTextView.setVisibility(View.VISIBLE);
+                holder.rightTextView.setText(message.getMessage());
+            }
+
+            // Load user profile picture
             if (userProfileUri != null && !userProfileUri.isEmpty()) {
                 Glide.with(context)
                         .load(userProfileUri)
                         .apply(RequestOptions.circleCropTransform())
-                        .placeholder(R.drawable.person) // Default placeholder
-                        .error(R.drawable.person) // Error placeholder
+                        .placeholder(R.drawable.person)
+                        .error(R.drawable.person)
                         .into(holder.profileImage);
             } else {
-                holder.profileImage.setImageResource(R.drawable.person); // Default placeholder
+                holder.profileImage.setImageResource(R.drawable.person);
             }
+
         } else {
             // Bot message: Show left chat view
             holder.rightChatView.setVisibility(View.GONE);
             holder.leftChatView.setVisibility(View.VISIBLE);
 
-            holder.leftTextView.setText(message.getMessage());
+            if (message.getImageUrl() != null) {
+                // Show image with optional caption
+                holder.leftTextView.setVisibility(View.GONE);
+                holder.leftImageView.setVisibility(View.VISIBLE);
+                holder.leftCaptionTextView.setVisibility(View.VISIBLE);
 
-            // Set Pookies logo for bot messages
+                Glide.with(context)
+                        .load(message.getImageUrl())
+                        .placeholder(R.drawable.placeholder_image)
+                        .into(holder.leftImageView);
+
+                holder.leftCaptionTextView.setText(message.getCaption() != null ? message.getCaption() : "");
+            } else {
+                // Show text-only message
+                holder.leftImageView.setVisibility(View.GONE);
+                holder.leftCaptionTextView.setVisibility(View.GONE);
+                holder.leftTextView.setVisibility(View.VISIBLE);
+                holder.leftTextView.setText(message.getMessage());
+            }
+
             holder.botLogo.setImageResource(R.drawable.pink_logo); // Pookies logo
         }
     }
+
 
 
     @Override
@@ -103,7 +140,8 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MyViewHo
     public static class MyViewHolder extends RecyclerView.ViewHolder {
         LinearLayout leftChatView, rightChatView;
         TextView leftTextView, rightTextView;
-        ImageView profileImage, botLogo;
+        ImageView profileImage, botLogo, leftImageView, rightImageView;
+        TextView leftCaptionTextView, rightCaptionTextView;
 
         public MyViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -111,8 +149,13 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MyViewHo
             rightChatView = itemView.findViewById(R.id.right_chat_view);
             leftTextView = itemView.findViewById(R.id.left_chat_text_view);
             rightTextView = itemView.findViewById(R.id.right_chat_text_view);
-            profileImage = itemView.findViewById(R.id.profile_image); // Right-side user profile picture
-            botLogo = itemView.findViewById(R.id.bot_logo); // Left-side Pookies logo
+            profileImage = itemView.findViewById(R.id.profile_image);
+            botLogo = itemView.findViewById(R.id.bot_logo);
+            leftImageView = itemView.findViewById(R.id.left_image_view); // New
+            rightImageView = itemView.findViewById(R.id.right_image_view); // New
+            leftCaptionTextView = itemView.findViewById(R.id.left_caption_text_view); // New
+            rightCaptionTextView = itemView.findViewById(R.id.right_caption_text_view); // New
         }
     }
+
 }

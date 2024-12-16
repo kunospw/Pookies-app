@@ -5,6 +5,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import androidx.annotation.NonNull;
@@ -51,6 +52,7 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
     MessageAdapter messageAdapter;
     FirebaseAuth mAuth;
     String userId;
+    String userName;
     MessagingService messagingService;
     boolean isBound = false;
     public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
@@ -82,6 +84,7 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
         if (user != null) {
             userId = user.getUid();
             mDatabase = FirebaseDatabase.getInstance().getReference("users").child(userId).child("messages");
+            fetchUserName();
 
             // Fetch the profile picture dynamically
             fetchUserProfilePicture();
@@ -110,16 +113,54 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
         llm.setStackFromEnd(true);
         recyclerView.setLayoutManager(llm);
 
-        sendButton.setOnClickListener((v) -> {
-            String question = messageEditText.getText().toString().trim();
-            addToChat(question, Message.SENT_BY_ME);
-            messageEditText.setText("");
-            callAPI(question);
+        sendButton.setOnClickListener(v -> {
+            String userInput = messageEditText.getText().toString().trim();
+            if (!userInput.isEmpty()) {
+                addToChat(userInput, Message.SENT_BY_ME);
+
+                if (userInput.toLowerCase().startsWith("generate me an image of")) {
+                    generateImage(userInput.replace("generate me an image of", "").trim());
+                } else {
+                    callAPI(userInput, null, null);
+                }
+
+                messageEditText.setText("");
+            }
         });
 
         loadChatHistory();
 
+
         return view;
+    }
+
+    private void addImageToChat(String imageUrl, String description) {
+        Message imageMessage = new Message(imageUrl, description, Message.SENT_BY_BOT);
+        messageList.add(imageMessage);
+        messageAdapter.notifyItemInserted(messageList.size() - 1);
+        recyclerView.scrollToPosition(messageList.size() - 1);
+
+        // Save to Firebase
+        mDatabase.push().setValue(imageMessage);
+    }
+
+    private void fetchUserName() {
+        DatabaseReference userInfoRef = FirebaseDatabase.getInstance().getReference("user-info").child(userId);
+        userInfoRef.addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                if (snapshot.exists() && snapshot.hasChild("name")) {
+                    userName = snapshot.child("name").getValue(String.class);
+                } else {
+                    userName = "User"; // Fallback to default
+                }
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {
+                userName = "User"; // Fallback to default
+            }
+        });
     }
 
     private void showMessageOptions(View view, Message message, int position) {
@@ -328,63 +369,120 @@ public class ChatFragment extends Fragment implements MessagingService.MessageLi
         addToChat(response, Message.SENT_BY_BOT);
     }
 
-    void callAPI(String question) {
+    void callAPI(String question, String imageUrl, String caption) {
         JSONObject jsonBody = new JSONObject();
         try {
-            // Create the main request body
-            jsonBody.put("model", "gpt-4o");  // Changed from gpt-4o to gpt-4
-            jsonBody.put("messages", new JSONArray()
-                    .put(new JSONObject()
-                            .put("role", "system")
-                            .put("content", "You are a friendly buddy called Pookies. Your main job is to accompany, support, and give positive feedback to the user. " +
-                                    "Here are your constraints: 1. Refrain from using any bad words. 2. Avoid talking or engaging in any negative or inappropriate topics, including drugs, explicit content, or NSFW discussions. " +
-                                    "3. Keep the user in high spirits and maintain a good mood. 4. Keep the chat casual and fun, adjusting to the latest internet trends and slang. Don't be overly descriptive and sounds unnatural like a bot. Behave humanly as much as possible. " +
-                                    "5. Do not be overly excited at the start of the conversation."))
-                    .put(new JSONObject()
-                            .put("role", "user")
-                            .put("content", question)));
+            jsonBody.put("model", "gpt-4");
 
-            // Add other parameters
+            // Construct the messages array dynamically
+            JSONArray messages = new JSONArray();
+
+            // Add the system role message
+            messages.put(new JSONObject()
+                    .put("role", "system")
+                    .put("content", "You are a friendly buddy called Pookies. Your main job is to accompany, support, and give positive feedback to the user named " + userName + ". " +
+                            "Here are your constraints: 1. Refrain from using any bad words. 2. Avoid talking or engaging in any negative or inappropriate topics, including drugs, explicit content, or NSFW discussions. " +
+                            "3. Keep the user in high spirits and maintain a good mood. 4. Keep the chat casual and fun, adjusting to the latest internet trends and slang. Don't be overly descriptive or sound unnatural like a bot. Behave humanly as much as possible. " +
+                            "5. Do not be overly excited at the start of the conversation."));
+
+            // Add user input text if provided
+            if (question != null && !question.isEmpty()) {
+                messages.put(new JSONObject()
+                        .put("role", "user")
+                        .put("content", question));
+            }
+
+            // Add image details if available
+            if (imageUrl != null && !imageUrl.isEmpty()) {
+                if (caption != null && !caption.isEmpty()) {
+                    messages.put(new JSONObject()
+                            .put("role", "user")
+                            .put("content", "Here is an image with the caption: " + caption));
+                }
+                messages.put(new JSONObject()
+                        .put("role", "user")
+                        .put("content", "Image URL: " + imageUrl));
+            }
+
+            jsonBody.put("messages", messages);
             jsonBody.put("max_tokens", 4000);
             jsonBody.put("temperature", 0.5);
+
         } catch (JSONException e) {
             e.printStackTrace();
         }
 
         RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
         Request request = new Request.Builder()
-                .url("https://api.openai.com/v1/chat/completions")  // Updated endpoint for chat completions
-                .header("Authorization", "Bearer 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")
+                .url("https://api.openai.com/v1/chat/completions")
+                .header("Authorization", "Bearer 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")
                 .post(body)
                 .build();
 
         client.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                addResponse("Failed to load response due to " + e.getMessage());
+                addResponse("Failed to load response: " + e.getMessage());
             }
 
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
                 if (response.isSuccessful()) {
-                    JSONObject jsonObject;
                     try {
-                        jsonObject = new JSONObject(response.body().string());
-                        JSONArray jsonArray = jsonObject.getJSONArray("choices");
-                        JSONObject firstChoice = jsonArray.getJSONObject(0);
+                        JSONObject jsonResponse = new JSONObject(response.body().string());
+                        JSONArray choices = jsonResponse.getJSONArray("choices");
+                        JSONObject firstChoice = choices.getJSONObject(0);
                         String result = firstChoice.getJSONObject("message").getString("content");
                         addResponse(result.trim());
                     } catch (JSONException e) {
-                        throw new RuntimeException(e);
+                        e.printStackTrace();
+                        addResponse("Failed to parse the response.");
                     }
                 } else {
-                    addResponse("Failed to load response due to " + response.body().string());
+                    addResponse("Failed to load response: " + response.message());
                 }
             }
         });
     }
+    private void generateImage(String prompt) {
+        JSONObject requestBody = new JSONObject();
+        try {
+            requestBody.put("prompt", prompt);
+            requestBody.put("n", 1);
+            requestBody.put("size", "512x512");
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
 
-    @Override
+        Request request = new Request.Builder()
+                .url("https://api.openai.com/v1/images/generations")
+                .header("Authorization", "Bearer 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")
+                .post(RequestBody.create(requestBody.toString(), JSON))
+                .build();
+
+        client.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                addToChat("Failed to generate image: " + e.getMessage(), Message.SENT_BY_BOT);
+            }
+
+            @Override
+            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+                if (response.isSuccessful()) {
+                    try {
+                        JSONObject jsonResponse = new JSONObject(response.body().string());
+                        String imageUrl = jsonResponse.getJSONArray("data").getJSONObject(0).getString("url");
+                        addImageToChat(imageUrl, "Generated Image: " + prompt);
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                        addToChat("Failed to parse image response.", Message.SENT_BY_BOT);
+                    }
+                } else {
+                    addToChat("Failed to generate image: " + response.message(), Message.SENT_BY_BOT);
+                }
+            }
+        });
+    }
     public void onNewMessage(Message message) {
         if (getActivity() != null) {
             getActivity().runOnUiThread(() -> {
