@@ -449,7 +449,7 @@ public class ChatFragment extends Fragment {
                             RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
                             Request request = new Request.Builder()
                                     .url("https://api.openai.com/v1/chat/completions")
-                                    .header("Authorization", "Bearer OPENAIKEY")
+                                    .header("Authorization", "Bearer OPEN_AI_KEY here")
                                     .post(body)
                                     .build();
 
