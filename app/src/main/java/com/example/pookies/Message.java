@@ -20,14 +20,6 @@ public class Message {
         this.timestamp = System.currentTimeMillis();  // Set timestamp
     }
 
-    // Constructor for image messages
-    public Message(String imageUrl, String caption, String sentBy) {
-        this.imageUrl = imageUrl;
-        this.caption = caption;
-        this.sentBy = sentBy;
-        this.timestamp = System.currentTimeMillis();  // Set timestamp
-    }
-
     // Getters and setters
     public String getMessage() {
         return message;

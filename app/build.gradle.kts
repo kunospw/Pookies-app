@@ -53,6 +53,5 @@ dependencies {
     annotationProcessor ("com.github.bumptech.glide:compiler:4.12.0")
     implementation ("com.google.android.material:material:1.8.0")
     implementation ("com.google.firebase:firebase-bom:32.7.0")
-
-
+    implementation ("com.google.android.gms:play-services-auth:20.6.0")
 }
