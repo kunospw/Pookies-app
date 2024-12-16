@@ -462,7 +462,7 @@ public class ChatFragment extends Fragment {
                                 RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
                                 Request request = new Request.Builder()
                                         .url("https://api.openai.com/v1/chat/completions")
-                                        .header("Authorization", "Bearer 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")
+                                        .header("Authorization", "Bearer API_KEY_HERE")
                                         .post(body)
                                         .build();
 
@@ -567,7 +567,7 @@ public class ChatFragment extends Fragment {
             RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
             Request request = new Request.Builder()
                     .url("https://api.openai.com/v1/images/generations")
-                    .header("Authorization", "Bearer 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")
+                    .header("Authorization", "Bearer API_KEY_HERE")
                     .post(body)
                     .build();
 
