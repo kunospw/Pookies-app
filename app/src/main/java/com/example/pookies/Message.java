@@ -9,6 +9,7 @@ public class Message {
     private String imageUrl;  // Image URL field
     private String caption;   // Caption field
 
+
     // Default constructor for Firebase
     public Message() {
     }

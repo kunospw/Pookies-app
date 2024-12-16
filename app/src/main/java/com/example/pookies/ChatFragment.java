@@ -31,8 +31,11 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.MediaType;
@@ -50,9 +53,13 @@ public class ChatFragment extends Fragment {
     FirebaseAuth mAuth;
     String userId;
     public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
-    OkHttpClient client = new OkHttpClient();
+    OkHttpClient client = new OkHttpClient.Builder()
+            .connectTimeout(60, TimeUnit.SECONDS)  // Increase connection timeout
+            .readTimeout(60, TimeUnit.SECONDS)     // Increase read timeout
+            .writeTimeout(60, TimeUnit.SECONDS)    // Increase write timeout
+            .build();
     DatabaseReference mDatabase;
-    String userProfileUri;
+    private String userProfileUri = null;
     private String userName = "User"; // Default value if name isn't fetched
     private List<String> chatContext = new ArrayList<>();
 
@@ -70,7 +77,7 @@ public class ChatFragment extends Fragment {
             fetchChatContext();
             fetchUserName();
             // Fetch the profile picture dynamically
-            fetchUserProfilePicture();
+            fetchUserProfilePictureAndInitializeAdapter();
         }
     }
 
@@ -80,6 +87,7 @@ public class ChatFragment extends Fragment {
         recyclerView = view.findViewById(R.id.recycler_view);
         messageEditText = view.findViewById(R.id.message_edit_text);
         sendButton = view.findViewById(R.id.send_btn);
+
 
         // Initialize adapter
         messageAdapter = new MessageAdapter(getContext(), messageList, (view1, message, position) -> {
@@ -283,7 +291,7 @@ public class ChatFragment extends Fragment {
                 });
     }
 
-    private void fetchUserProfilePicture() {
+    private void fetchUserProfilePictureAndInitializeAdapter() {
         DatabaseReference userInfoRef = FirebaseDatabase.getInstance().getReference("user-info").child(userId);
 
         userInfoRef.addListenerForSingleValueEvent(new ValueEventListener() {
@@ -324,18 +332,20 @@ public class ChatFragment extends Fragment {
     }
 
     private void initializeAdapter() {
+        // Capture the current value of userProfileUri before using it in the lambda
+        final String profileUri = userProfileUri;
+
         messageAdapter = new MessageAdapter(getContext(), messageList, (view, message, position) -> {
             showMessageOptions(view, message, position);
-        }, userProfileUri);
+        }, profileUri);
 
         recyclerView.setAdapter(messageAdapter);
         LinearLayoutManager llm = new LinearLayoutManager(getContext());
-        llm.setStackFromEnd (true);
+        llm.setStackFromEnd(true);
         recyclerView.setLayoutManager(llm);
 
         loadChatHistory();
     }
-
     @Override
     public void onDestroy() {
         super.onDestroy();
@@ -402,110 +412,223 @@ public class ChatFragment extends Fragment {
     }
 
     void callAPI(String question) {
-        // Ensure we're on the main thread
         if (getActivity() != null) {
             getActivity().runOnUiThread(() -> {
-                // Fetch recent context messages from Firebase
-                DatabaseReference chatContextRef = FirebaseDatabase.getInstance()
-                        .getReference("users").child(userId).child("chatContext");
-                chatContextRef.limitToLast(10).addListenerForSingleValueEvent(new ValueEventListener() {
-                    @Override
-                    public void onDataChange(@NonNull DataSnapshot snapshot) {
-                        try {
-                            JSONObject jsonBody = new JSONObject();
-                            JSONArray messagesArray = new JSONArray();
+                // Check if the message is an image generation request
+                if (isImageGenerationRequest(question)) {
+                    generateImage(question);
+                } else {
+                    // Fetch recent context messages from Firebase
+                    DatabaseReference chatContextRef = FirebaseDatabase.getInstance()
+                            .getReference("users").child(userId).child("chatContext");
+                    chatContextRef.limitToLast(10).addListenerForSingleValueEvent(new ValueEventListener() {
+                        @Override
+                        public void onDataChange(@NonNull DataSnapshot snapshot) {
+                            try {
+                                JSONObject jsonBody = new JSONObject();
+                                JSONArray messagesArray = new JSONArray();
 
-                            // Add system message
-                            messagesArray.put(new JSONObject()
-                                    .put("role", "system")
-                                    .put("content", "You are a friendly buddy called Pookies. Your main job is to accompany, support, and give positive feedback to the user named " + userName +
-                                            "Here are your constraints: 1. Refrain from using any bad words. 2. Avoid talking or engaging in any negative or inappropriate topics, including drugs, explicit content, or NSFW discussions. " +
-                                            "3. Keep the user in high spirits and maintain a good mood. 4. Keep the chat casual and fun, adjusting to the latest internet trends and slang. Don't be overly descriptive and sounds unnatural like a bot. Behave humanly as much as possible. " +
-                                            "5. Do not be overly excited at the start of the conversation."));
+                                // Add system message
+                                messagesArray.put(new JSONObject()
+                                        .put("role", "system")
+                                        .put("content", "You are a friendly buddy called Pookies. Your main job is to accompany, support, and give positive feedback to the user named " + userName +
+                                                "Here are your constraints: 1. Refrain from using any bad words. 2. Avoid talking or engaging in any negative or inappropriate topics, including drugs, explicit content, or NSFW discussions. " +
+                                                "3. Keep the user in high spirits and maintain a good mood. 4. Keep the chat casual and fun, adjusting to the latest internet trends and slang. Don't be overly descriptive and sounds unnatural like a bot. Behave humanly as much as possible. " +
+                                                "5. Do not be overly excited at the start of the conversation."));
 
-                            // Add recent context messages
-                            for (DataSnapshot messageSnapshot : snapshot.getChildren()) {
-                                Message contextMessage = messageSnapshot.getValue(Message.class);
-                                if (contextMessage != null) {
-                                    String role = contextMessage.getSentBy().equals(Message.SENT_BY_ME) ? "user" : "assistant";
-                                    messagesArray.put(new JSONObject()
-                                            .put("role", role)
-                                            .put("content", contextMessage.getMessage()));
-                                }
-                            }
-
-                            // Add current user question
-                            messagesArray.put(new JSONObject()
-                                    .put("role", "user")
-                                    .put("content", question));
-
-                            // Prepare the full JSON body
-                            jsonBody.put("model", "gpt-4");
-                            jsonBody.put("messages", messagesArray);
-                            jsonBody.put("max_tokens", 4000);
-                            jsonBody.put("temperature", 0.5);
-
-                            // Prepare and send the API request
-                            RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
-                            Request request = new Request.Builder()
-                                    .url("https://api.openai.com/v1/chat/completions")
-                                    .header("Authorization", "Bearer OPEN_AI_KEY here")
-                                    .post(body)
-                                    .build();
-
-                            client.newCall(request).enqueue(new Callback() {
-                                @Override
-                                public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                                    // Ensure response is added on main thread
-                                    if (getActivity() != null) {
-                                        getActivity().runOnUiThread(() ->
-                                                addResponse("Failed to load response: " + e.getMessage())
-                                        );
+                                // Add recent context messages
+                                for (DataSnapshot messageSnapshot : snapshot.getChildren()) {
+                                    Message contextMessage = messageSnapshot.getValue(Message.class);
+                                    if (contextMessage != null) {
+                                        String role = contextMessage.getSentBy().equals(Message.SENT_BY_ME) ? "user" : "assistant";
+                                        messagesArray.put(new JSONObject()
+                                                .put("role", role)
+                                                .put("content", contextMessage.getMessage()));
                                     }
                                 }
 
-                                @Override
-                                public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                                    if (getActivity() != null) {
-                                        getActivity().runOnUiThread(() -> {
-                                            try {
-                                                if (response.isSuccessful()) {
-                                                    String responseBody = response.body().string();
-                                                    JSONObject jsonObject = new JSONObject(responseBody);
-                                                    JSONArray jsonArray = jsonObject.getJSONArray("choices");
-                                                    JSONObject firstChoice = jsonArray.getJSONObject(0);
-                                                    String result = firstChoice.getJSONObject("message").getString("content");
+                                // Add current user question
+                                messagesArray.put(new JSONObject()
+                                        .put("role", "user")
+                                        .put("content", question));
 
-                                                    // Add the bot's response to the chat
-                                                    addResponse(result.trim());
-                                                } else {
-                                                    // Handle unsuccessful response
-                                                    addResponse("Failed to load response: " + response.code() + " " + response.message());
+                                // Prepare the full JSON body
+                                jsonBody.put("model", "gpt-4");
+                                jsonBody.put("messages", messagesArray);
+                                jsonBody.put("max_tokens", 4000);
+                                jsonBody.put("temperature", 0.5);
+
+                                // Prepare and send the API request
+                                RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
+                                Request request = new Request.Builder()
+                                        .url("https://api.openai.com/v1/chat/completions")
+                                        .header("Authorization", "Bearer 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")
+                                        .post(body)
+                                        .build();
+
+                                client.newCall(request).enqueue(new Callback() {
+                                    @Override
+                                    public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                                        // Ensure response is added on main thread
+                                        if (getActivity() != null) {
+                                            getActivity().runOnUiThread(() ->
+                                                    addResponse("Failed to load response: " + e.getMessage())
+                                            );
+                                        }
+                                    }
+
+                                    @Override
+                                    public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+                                        if (getActivity() != null) {
+                                            getActivity().runOnUiThread(() -> {
+                                                try {
+                                                    if (response.isSuccessful()) {
+                                                        String responseBody = response.body().string();
+                                                        JSONObject jsonObject = new JSONObject(responseBody);
+                                                        JSONArray jsonArray = jsonObject.getJSONArray("choices");
+                                                        JSONObject firstChoice = jsonArray.getJSONObject(0);
+                                                        String result = firstChoice.getJSONObject("message").getString("content");
+
+                                                        // Add the bot's response to the chat
+                                                        addResponse(result.trim());
+                                                    } else {
+                                                        // Handle unsuccessful response
+                                                        addResponse("Failed to load response: " + response.code() + " " + response.message());
+                                                    }
+                                                } catch (JSONException | IOException e) {
+                                                    // Handle parsing errors
+                                                    addResponse("Error processing response: " + e.getMessage());
                                                 }
-                                            } catch (JSONException | IOException e) {
-                                                // Handle parsing errors
-                                                addResponse("Error processing response: " + e.getMessage());
-                                            }
-                                        });
+                                            });
+                                        }
                                     }
-                                }
-                            });
+                                });
 
-                        } catch (JSONException e) {
-                            // Handle JSON creation errors
-                            Log.e("ChatFragment", "Error creating JSON for API call", e);
-                            addResponse("Error preparing API request: " + e.getMessage());
+                            } catch (JSONException e) {
+                                // Handle JSON creation errors
+                                Log.e("ChatFragment", "Error creating JSON for API call", e);
+                                addResponse("Error preparing API request: " + e.getMessage());
+                            }
                         }
-                    }
 
-                    @Override
-                    public void onCancelled(@NonNull DatabaseError error) {
-                        // Handle database error
-                        Log.e("ChatFragment", "Error fetching context messages", error.toException());
-                        addResponse("Error fetching chat history: " + error.getMessage());
-                    }
-                });
+                        @Override
+                        public void onCancelled(@NonNull DatabaseError error) {
+                            // Handle database error
+                            Log.e("ChatFragment", "Error fetching context messages", error.toException());
+                            addResponse("Error fetching chat history: " + error.getMessage());
+                        }
+                    });
+                }
             });
         }
     }
+    private boolean isImageGenerationRequest(String message) {
+        // List of keywords that might indicate an image generation request
+        String[] imageGenerationTriggers = {
+                "generate an image of",
+                "create an image of",
+                "draw a picture of",
+                "make an image of",
+                "generate image of",
+                "create image of"
+        };
+
+        // Convert message to lowercase for case-insensitive matching
+        String lowerMessage = message.toLowerCase().trim();
+
+        // Check if the message starts with any of the triggers
+        for (String trigger : imageGenerationTriggers) {
+            if (lowerMessage.startsWith(trigger)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    private void generateImage(String prompt) {
+        // Extract the actual image description by removing the generation trigger
+        String[] imageGenerationTriggers = {
+                "generate an image of",
+                "create an image of",
+                "draw a picture of",
+                "make an image of",
+                "generate image of",
+                "create image of"
+        };
+
+        String imageDescription = Arrays.stream(imageGenerationTriggers).filter(trigger -> prompt.toLowerCase().startsWith(trigger)).findFirst().map(trigger -> prompt.substring(trigger.length()).trim()).orElse(prompt);
+
+        try {
+            JSONObject jsonBody = new JSONObject();
+            jsonBody.put("model", "dall-e-3");
+            jsonBody.put("prompt", imageDescription);
+            jsonBody.put("n", 1);
+            jsonBody.put("size", "1024x1024");
+
+            RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
+            Request request = new Request.Builder()
+                    .url("https://api.openai.com/v1/images/generations")
+                    .header("Authorization", "Bearer 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")
+                    .post(body)
+                    .build();
+
+            client.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() ->
+                                addResponse("Failed to generate image: " + e.getMessage())
+                        );
+                    }
+                }
+
+                @Override
+                public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            try {
+                                if (response.isSuccessful()) {
+                                    String responseBody = response.body().string();
+                                    JSONObject jsonObject = new JSONObject(responseBody);
+                                    JSONArray dataArray = jsonObject.getJSONArray("data");
+
+                                    if (dataArray.length() > 0) {
+                                        String imageUrl = dataArray.getJSONObject(0).getString("url");
+
+                                        // Create a new Message with the image URL
+                                        Message imageMessage = new Message(imageDescription, Message.SENT_BY_BOT);
+                                        imageMessage.setImageUrl(imageUrl);
+                                        imageMessage.setCaption("Generated image: " + imageDescription);
+
+                                        // Save to messages table
+                                        String messageId = mDatabase.push().getKey();
+                                        if (messageId != null) {
+                                            mDatabase.child(messageId).setValue(imageMessage)
+                                                    .addOnSuccessListener(aVoid -> {
+                                                        saveContextMessage(imageMessage);
+                                                    })
+                                                    .addOnFailureListener(e -> {
+                                                        Toast.makeText(getContext(), "Failed to save image message: " + e.getMessage(),
+                                                                Toast.LENGTH_SHORT).show();
+                                                    });
+                                        }
+                                    } else {
+                                        addResponse("No image was generated.");
+                                    }
+                                } else {
+                                    addResponse("Failed to generate image: " + response.code() + " " + response.message());
+                                }
+                            } catch (JSONException | IOException e) {
+                                addResponse("Error processing image generation response: " + e.getMessage());
+                            }
+                        });
+                    }
+                }
+            });
+
+        } catch (JSONException e) {
+            Log.e("ChatFragment", "Error creating JSON for image generation", e);
+            addResponse("Error preparing image generation request: " + e.getMessage());
+        }
+    }
+
 }

@@ -109,18 +109,24 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MyViewHo
                 // Show image with optional caption
                 holder.leftTextView.setVisibility(View.GONE);
                 holder.leftImageView.setVisibility(View.VISIBLE);
-                holder.leftCaptionTextView.setVisibility(View.VISIBLE);
 
                 Glide.with(context)
                         .load(message.getImageUrl())
                         .placeholder(R.drawable.placeholder_image)
                         .into(holder.leftImageView);
 
-                holder.leftCaptionTextView.setText(message.getCaption() != null ? message.getCaption() : "");
+                if (message.getCaption() != null && !message.getCaption().isEmpty()) {
+                    // Show the caption container with text
+                    holder.leftCaptionContainer.setVisibility(View.VISIBLE);
+                    holder.leftCaptionTextView.setText(message.getCaption());
+                } else {
+                    // Hide the caption container if no caption is available
+                    holder.leftCaptionContainer.setVisibility(View.GONE);
+                }
             } else {
                 // Show text-only message
                 holder.leftImageView.setVisibility(View.GONE);
-                holder.leftCaptionTextView.setVisibility(View.GONE);
+                holder.leftCaptionContainer.setVisibility(View.GONE);
                 holder.leftTextView.setVisibility(View.VISIBLE);
                 holder.leftTextView.setText(message.getMessage());
             }
@@ -139,6 +145,7 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MyViewHo
     // ViewHolder class for chat items
     public static class MyViewHolder extends RecyclerView.ViewHolder {
         LinearLayout leftChatView, rightChatView;
+        LinearLayout leftCaptionContainer;
         TextView leftTextView, rightTextView;
         ImageView profileImage, botLogo, leftImageView, rightImageView;
         TextView leftCaptionTextView, rightCaptionTextView;
@@ -153,6 +160,7 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MyViewHo
             botLogo = itemView.findViewById(R.id.bot_logo);
             leftImageView = itemView.findViewById(R.id.left_image_view); // New
             rightImageView = itemView.findViewById(R.id.right_image_view); // New
+            leftCaptionContainer = itemView.findViewById(R.id.left_caption_container); // New
             leftCaptionTextView = itemView.findViewById(R.id.left_caption_text_view); // New
             rightCaptionTextView = itemView.findViewById(R.id.right_caption_text_view); // New
         }
