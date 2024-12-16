@@ -134,42 +134,64 @@ public class ChatFragment extends Fragment {
         DatabaseReference chatContextRef = FirebaseDatabase.getInstance()
                 .getReference("users").child(userId).child("chatContext");
 
+        chatContextRef.limitToLast(20) // Limit to last 20 messages
+                .addValueEventListener(new ValueEventListener() {
+                    @Override
+                    public void onDataChange(@NonNull DataSnapshot snapshot) {
+                        chatContext.clear();
+                        for (DataSnapshot childSnapshot : snapshot.getChildren()) {
+                            Message message = childSnapshot.getValue(Message.class);
+                            if (message != null) {
+                                chatContext.add(message.getMessage());
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void onCancelled(@NonNull DatabaseError error) {
+                        Log.e("ChatFragment", "Error fetching chat context: " + error.getMessage());
+                    }
+                });
+    }
+    private void saveContextMessage(Message message) {
+        DatabaseReference chatContextRef = FirebaseDatabase.getInstance()
+                .getReference("users").child(userId).child("chatContext");
+
         chatContextRef.addListenerForSingleValueEvent(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot snapshot) {
-                List<Message> messageList = new ArrayList<>();  // List to hold messages
+                long contextSize = snapshot.getChildrenCount();
 
-                for (DataSnapshot childSnapshot : snapshot.getChildren()) {
-                    Message message = childSnapshot.getValue(Message.class);
+                // If context is getting too large, remove oldest messages
+                if (contextSize >= 20) {
+                    List<String> keysToRemove = new ArrayList<>();
+                    for (DataSnapshot childSnapshot : snapshot.getChildren()) {
+                        if (keysToRemove.size() < contextSize - 19) {
+                            keysToRemove.add(childSnapshot.getKey());
+                        }
+                    }
 
-                    if (message != null) {
-                        messageList.add(message);  // Add to list
-                        Log.d("ChatFragment", "Message: " + message.getMessage() + ", Sent By: " + message.getSentBy());
+                    // Remove oldest messages
+                    for (String key : keysToRemove) {
+                        chatContextRef.child(key).removeValue();
                     }
                 }
 
+                // Add new context record with minimal information
+                HashMap<String, Object> contextEntry = new HashMap<>();
+                contextEntry.put("message", message.getMessage());
+                contextEntry.put("sentBy", message.getSentBy());
+                contextEntry.put("timestamp", message.getTimestamp());
+
+                chatContextRef.push().setValue(contextEntry);
             }
 
             @Override
             public void onCancelled(@NonNull DatabaseError error) {
-                Log.e("ChatFragment", "Error fetching messages: " + error.getMessage());
+                Log.e("ChatFragment", "Error managing chat context: " + error.getMessage());
             }
         });
     }
-
-    private void saveChatContext(String messageText, String sentBy) {
-        DatabaseReference chatContextRef = FirebaseDatabase.getInstance()
-                .getReference("users").child(userId).child("chatContext");
-
-        // Create a new Message instance
-        Message newMessage = new Message(messageText, sentBy);
-
-        // Push the message to Firebase (avoids overwriting)
-        chatContextRef.push().setValue(newMessage)
-                .addOnSuccessListener(aVoid -> Log.d("ChatFragment", "Message saved successfully"))
-                .addOnFailureListener(e -> Log.e("ChatFragment", "Failed to save message: " + e.getMessage()));
-    }
-
 
 
     private void showMessageOptions(View view, Message message, int position) {
@@ -320,10 +342,10 @@ public class ChatFragment extends Fragment {
     }
 
     private void loadChatHistory() {
-        messageList.clear();
         mDatabase.orderByChild("timestamp").addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                // Clear the list before adding messages
                 messageList.clear();
                 for (DataSnapshot messageSnapshot : dataSnapshot.getChildren()) {
                     try {
@@ -350,31 +372,29 @@ public class ChatFragment extends Fragment {
             }
         });
     }
-
-
     void addToChat(String message, String sentBy) {
-        if (getActivity() != null) {
-            getActivity().runOnUiThread(() -> {
-                Message newMessage = new Message(message, sentBy);
+        if (message != null && !message.trim().isEmpty()) {
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(() -> {
+                    Message newMessage = new Message(message, sentBy);
 
-                // Save message to Firebase
-                String messageId = mDatabase.push().getKey();
-                if (messageId != null) {
-                    mDatabase.child(messageId).setValue(newMessage)
-                            .addOnSuccessListener(aVoid -> {
-                                messageEditText.setText("");
-                                recyclerView.smoothScrollToPosition(messageList.size());
-                            })
-                            .addOnFailureListener(e -> {
-                                Toast.makeText(getContext(), "Failed to send message: " + e.getMessage(),
-                                        Toast.LENGTH_SHORT).show();
-                            });
-                }
-                chatContext.add(message); // Add new message to context
-                saveChatContext(message, sentBy); // Corrected to pass the message and sentBy
-            });
+                    // Save to messages table
+                    String messageId = mDatabase.push().getKey();
+                    if (messageId != null) {
+                        mDatabase.child(messageId).setValue(newMessage)
+                                .addOnSuccessListener(aVoid -> {
+                                    saveContextMessage(newMessage);
+                                })
+                                .addOnFailureListener(e -> {
+                                    Toast.makeText(getContext(), "Failed to send message: " + e.getMessage(),
+                                            Toast.LENGTH_SHORT).show();
+                                });
+                    }
+                });
+            }
         }
     }
+
 
 
     void addResponse(String response) {
@@ -382,56 +402,110 @@ public class ChatFragment extends Fragment {
     }
 
     void callAPI(String question) {
-        JSONObject jsonBody = new JSONObject();
-        try {
-            jsonBody.put("model", "gpt-4");  // Updated model name
-            jsonBody.put("messages", new JSONArray()
-                    .put(new JSONObject()
-                            .put("role", "system")
-                            .put("content", "You are a friendly buddy called Pookies. Your main job is to accompany, support, and give positive feedback to the user named " + userName +
-                                    "Here are your constraints: 1. Refrain from using any bad words. 2. Avoid talking or engaging in any negative or inappropriate topics, including drugs, explicit content, or NSFW discussions. " +
-                                    "3. Keep the user in high spirits and maintain a good mood. 4. Keep the chat casual and fun, adjusting to the latest internet trends and slang. Don't be overly descriptive and sounds unnatural like a bot. Behave humanly as much as possible. " +
-                                    "5. Do not be overly excited at the start of the conversation."))
-                    .put(new JSONObject()
-                            .put("role", "user")
-                            .put("content", question)));
+        // Ensure we're on the main thread
+        if (getActivity() != null) {
+            getActivity().runOnUiThread(() -> {
+                // Fetch recent context messages from Firebase
+                DatabaseReference chatContextRef = FirebaseDatabase.getInstance()
+                        .getReference("users").child(userId).child("chatContext");
+                chatContextRef.limitToLast(10).addListenerForSingleValueEvent(new ValueEventListener() {
+                    @Override
+                    public void onDataChange(@NonNull DataSnapshot snapshot) {
+                        try {
+                            JSONObject jsonBody = new JSONObject();
+                            JSONArray messagesArray = new JSONArray();
 
-            jsonBody.put("max_tokens", 4000);
-            jsonBody.put("temperature", 0.5);
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
+                            // Add system message
+                            messagesArray.put(new JSONObject()
+                                    .put("role", "system")
+                                    .put("content", "You are a friendly buddy called Pookies. Your main job is to accompany, support, and give positive feedback to the user named " + userName +
+                                            "Here are your constraints: 1. Refrain from using any bad words. 2. Avoid talking or engaging in any negative or inappropriate topics, including drugs, explicit content, or NSFW discussions. " +
+                                            "3. Keep the user in high spirits and maintain a good mood. 4. Keep the chat casual and fun, adjusting to the latest internet trends and slang. Don't be overly descriptive and sounds unnatural like a bot. Behave humanly as much as possible. " +
+                                            "5. Do not be overly excited at the start of the conversation."));
 
-        RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
-        Request request = new Request.Builder()
-                .url("https://api.openai.com/v1/chat/completions")
-                .header("Authorization", "Bearer OPENAIKEY")
-                .post(body)
-                .build();
+                            // Add recent context messages
+                            for (DataSnapshot messageSnapshot : snapshot.getChildren()) {
+                                Message contextMessage = messageSnapshot.getValue(Message.class);
+                                if (contextMessage != null) {
+                                    String role = contextMessage.getSentBy().equals(Message.SENT_BY_ME) ? "user" : "assistant";
+                                    messagesArray.put(new JSONObject()
+                                            .put("role", role)
+                                            .put("content", contextMessage.getMessage()));
+                                }
+                            }
 
-        client.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                addResponse("Failed to load response due to " + e.getMessage());
-            }
+                            // Add current user question
+                            messagesArray.put(new JSONObject()
+                                    .put("role", "user")
+                                    .put("content", question));
 
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (response.isSuccessful()) {
-                    JSONObject jsonObject;
-                    try {
-                        jsonObject = new JSONObject(response.body().string());
-                        JSONArray jsonArray = jsonObject.getJSONArray("choices");
-                        JSONObject firstChoice = jsonArray.getJSONObject(0);
-                        String result = firstChoice.getJSONObject ("message").getString("content");
-                        addResponse(result.trim());
-                    } catch (JSONException e) {
-                        throw new RuntimeException(e);
+                            // Prepare the full JSON body
+                            jsonBody.put("model", "gpt-4");
+                            jsonBody.put("messages", messagesArray);
+                            jsonBody.put("max_tokens", 4000);
+                            jsonBody.put("temperature", 0.5);
+
+                            // Prepare and send the API request
+                            RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
+                            Request request = new Request.Builder()
+                                    .url("https://api.openai.com/v1/chat/completions")
+                                    .header("Authorization", "Bearer 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") // Replace with your actual key
+                                    .post(body)
+                                    .build();
+
+                            client.newCall(request).enqueue(new Callback() {
+                                @Override
+                                public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                                    // Ensure response is added on main thread
+                                    if (getActivity() != null) {
+                                        getActivity().runOnUiThread(() ->
+                                                addResponse("Failed to load response: " + e.getMessage())
+                                        );
+                                    }
+                                }
+
+                                @Override
+                                public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+                                    if (getActivity() != null) {
+                                        getActivity().runOnUiThread(() -> {
+                                            try {
+                                                if (response.isSuccessful()) {
+                                                    String responseBody = response.body().string();
+                                                    JSONObject jsonObject = new JSONObject(responseBody);
+                                                    JSONArray jsonArray = jsonObject.getJSONArray("choices");
+                                                    JSONObject firstChoice = jsonArray.getJSONObject(0);
+                                                    String result = firstChoice.getJSONObject("message").getString("content");
+
+                                                    // Add the bot's response to the chat
+                                                    addResponse(result.trim());
+                                                } else {
+                                                    // Handle unsuccessful response
+                                                    addResponse("Failed to load response: " + response.code() + " " + response.message());
+                                                }
+                                            } catch (JSONException | IOException e) {
+                                                // Handle parsing errors
+                                                addResponse("Error processing response: " + e.getMessage());
+                                            }
+                                        });
+                                    }
+                                }
+                            });
+
+                        } catch (JSONException e) {
+                            // Handle JSON creation errors
+                            Log.e("ChatFragment", "Error creating JSON for API call", e);
+                            addResponse("Error preparing API request: " + e.getMessage());
+                        }
                     }
-                } else {
-                    addResponse("Failed to load response due to " + response.body().string());
-                }
-            }
-        });
+
+                    @Override
+                    public void onCancelled(@NonNull DatabaseError error) {
+                        // Handle database error
+                        Log.e("ChatFragment", "Error fetching context messages", error.toException());
+                        addResponse("Error fetching chat history: " + error.getMessage());
+                    }
+                });
+            });
+        }
     }
 }
