@@ -39,6 +39,21 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.HashMap;
+import java.util.Map;
+
+
 public class ChatActivity extends AppCompatActivity {
     private static final int PROFILE_UPDATE_REQUEST = 1001;
     private static final String TAG = "ChatActivity";
@@ -137,13 +152,15 @@ public class ChatActivity extends AppCompatActivity {
         Log.d(TAG, "updateDrawerHeader: Updating drawer header");
         FirebaseUser currentUser = firebaseAuth.getCurrentUser();
         if (currentUser != null) {
+            // Save user data to Firebase and MySQL
+            saveUserData(currentUser);
+
             // Set email directly from FirebaseAuth
             textEmail.setText(currentUser.getEmail());
 
             // Set display name from FirebaseAuth, or email as fallback
             String displayName = currentUser.getDisplayName();
-            textUsername.setText(displayName != null && !displayName.isEmpty() ?
-                    displayName : currentUser.getEmail());
+            textUsername.setText(displayName != null && !displayName.isEmpty() ? displayName : currentUser.getEmail());
 
             // Load profile picture
             loadProfilePicture(currentUser.getUid(), currentUser.getEmail());
@@ -151,6 +168,7 @@ public class ChatActivity extends AppCompatActivity {
             Log.e(TAG, "updateDrawerHeader: Current Firebase user is null");
         }
     }
+
     private void loadProfilePicture(String uid, String email) {
         if (uid != null) {
             loadProfilePictureFromFirebase(uid);
@@ -314,6 +332,68 @@ public class ChatActivity extends AppCompatActivity {
             }, 1);
         }
     }
+
+    private void saveUserToMySQL(String firebaseUid, String email, String username, @Nullable String profilePictureUrl) {
+        String url = "http://192.168.1.6/Pookies/user.php"; // Replace with your server URL
+
+        RequestQueue requestQueue = Volley.newRequestQueue(this);
+
+        StringRequest postRequest = new StringRequest(Request.Method.POST, url,
+                response -> {
+                    Log.d("VolleyResponse", "Response: " + response);
+                    try {
+                        JSONObject jsonResponse = new JSONObject(response);
+                        boolean success = jsonResponse.getBoolean("success");
+                        String message = jsonResponse.getString("message");
+                        if (success) {
+                            Log.d(TAG, "saveUserToMySQL: " + message);
+                        } else {
+                            Log.e(TAG, "saveUserToMySQL: " + message);
+                        }
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                        Log.e(TAG, "saveUserToMySQL: JSON Parsing error", e);
+                    }
+                },
+                error -> {
+                    Log.e(TAG, "saveUserToMySQL: Volley error: " + error.toString());
+                    error.printStackTrace();
+                }
+        ) {
+            @Override
+            protected Map<String, String> getParams() {
+                Map<String, String> params = new HashMap<>();
+                params.put("firebase_uid", firebaseUid);
+                params.put("email", email);
+                params.put("username", username != null ? username : "");
+                params.put("profile_picture_url", profilePictureUrl != null ? profilePictureUrl : "");
+                return params;
+            }
+        };
+
+        // Add the request to the queue
+        requestQueue.add(postRequest);
+    }
+
+
+    private void saveUserData(FirebaseUser currentUser) {
+        String firebaseUid = currentUser.getUid();
+        String email = currentUser.getEmail();
+        String displayName = currentUser.getDisplayName();
+
+        String profilePicUri = null;
+        SharedPreferences prefs = getSharedPreferences("APP_PREFS", MODE_PRIVATE);
+        if (prefs.contains("PROFILE_PIC_URI_" + firebaseUid)) {
+            profilePicUri = prefs.getString("PROFILE_PIC_URI_" + firebaseUid, null);
+        }
+
+        // Save to Firebase
+        userRef.child(firebaseUid).setValue(new User(displayName, email, profilePicUri));
+
+        // Save to MySQL via PHP
+        saveUserToMySQL(firebaseUid, email, displayName, profilePicUri);
+    }
+
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {

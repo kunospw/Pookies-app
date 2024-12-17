@@ -7,7 +7,7 @@ public class User {
     private String profilePicUrl;
 
     // Required empty constructor for Firebase
-    public User() {}
+    public User(String displayName, String email, String profilePicUri) {}
 
     public User(String uid, String email, String name, String profilePicUrl) {
         this.uid = uid;
