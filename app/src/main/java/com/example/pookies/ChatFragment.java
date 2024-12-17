@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 
@@ -36,7 +38,10 @@ import com.google.firebase.storage.StorageReference;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -575,7 +580,7 @@ public class ChatFragment extends Fragment {
                                 RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
                                 Request request = new Request.Builder()
                                         .url("https://api.openai.com/v1/chat/completions")
-                                        .header("Authorization", "Bearer HEre")
+                                        .header("Authorization", "Bearer Here")
                                         .post(body)
                                         .build();
 
@@ -707,6 +712,7 @@ public class ChatFragment extends Fragment {
                                     if (dataArray.length() > 0) {
                                         String imageUrl = dataArray.getJSONObject(0).getString("url");
 
+                                        uploadImageToFirebaseStorage(imageUrl, "generated_image_" + System.currentTimeMillis() + ".png");
                                         // Create a new Message with the image URL
                                         Message imageMessage = new Message(imageDescription, Message.SENT_BY_BOT);
                                         imageMessage.setImageUrl(imageUrl);
@@ -743,6 +749,43 @@ public class ChatFragment extends Fragment {
             addResponse("Error preparing image generation request: " + e.getMessage());
         }
     }
+    private void uploadImageToFirebaseStorage(String imageUrl, String fileName) {
+        Thread thread = new Thread(() -> {
+            try {
+                // Download the image from the URL
+                URL url = new URL(imageUrl);
+                Bitmap bitmap = BitmapFactory.decodeStream(url.openConnection().getInputStream());
+
+                // Convert Bitmap to ByteArray for upload
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, baos);
+                byte[] data = baos.toByteArray();
+
+                // Firebase Storage reference
+                FirebaseStorage storage = FirebaseStorage.getInstance();
+                StorageReference storageRef = storage.getReference().child("images/" + fileName);
+
+                // Upload to Firebase Storage
+                storageRef.putBytes(data)
+                        .addOnSuccessListener(taskSnapshot -> storageRef.getDownloadUrl().addOnSuccessListener(downloadUri -> {
+                            // Get the Firebase Storage URL of the uploaded image
+                            String firebaseImageUrl = downloadUri.toString();
+
+                            // Optionally save this URL to Firebase Database or use it in your app
+                            Toast.makeText(getContext(), "Image uploaded to Firebase Storage: " + firebaseImageUrl, Toast.LENGTH_SHORT).show();
+                        }))
+                        .addOnFailureListener(e -> {
+                            Toast.makeText(getContext(), "Failed to upload image to Firebase Storage: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                        });
+            } catch (Exception e) {
+                getActivity().runOnUiThread(() ->
+                        Toast.makeText(getContext(), "Error downloading image: " + e.getMessage(), Toast.LENGTH_SHORT).show()
+                );
+            }
+        });
+        thread.start();
+    }
+
     private void analyzeImage(String imageUrl, String caption) {
         try {
             JSONObject jsonBody = new JSONObject();
@@ -782,7 +825,7 @@ public class ChatFragment extends Fragment {
             RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
             Request request = new Request.Builder()
                     .url("https://api.openai.com/v1/chat/completions")
-                    .header("Authorization", "Bearer HEre")
+                    .header("Authorization", "Bearer Here")
                     .post(body)
                     .build();
 
