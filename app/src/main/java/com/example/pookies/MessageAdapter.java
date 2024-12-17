@@ -72,23 +72,28 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MyViewHo
                 // Show image with optional caption
                 holder.rightTextView.setVisibility(View.GONE);
                 holder.rightImageView.setVisibility(View.VISIBLE);
-                holder.rightCaptionTextView.setVisibility(View.VISIBLE);
+
+                // Handle user image caption
+                if (message.getCaption() != null && !message.getCaption().isEmpty()) {
+                    holder.rightCaptionContainer.setVisibility(View.VISIBLE);
+                    holder.rightCaptionTextView.setText(message.getCaption());
+                } else {
+                    holder.rightCaptionContainer.setVisibility(View.GONE);
+                }
 
                 Glide.with(context)
                         .load(message.getImageUrl())
-                        .placeholder(R.drawable.placeholder_image)  // Add a placeholder image
+                        .placeholder(R.drawable.placeholder_image)
                         .into(holder.rightImageView);
-
-                holder.rightCaptionTextView.setText(message.getCaption() != null ? message.getCaption() : "");
             } else {
                 // Show text-only message
                 holder.rightImageView.setVisibility(View.GONE);
-                holder.rightCaptionTextView.setVisibility(View.GONE);
+                holder.rightCaptionContainer.setVisibility(View.GONE);
                 holder.rightTextView.setVisibility(View.VISIBLE);
                 holder.rightTextView.setText(message.getMessage());
             }
 
-            // Load user profile picture
+            // Load user profile picture (existing code)
             if (userProfileUri != null && !userProfileUri.isEmpty()) {
                 Glide.with(context)
                         .load(userProfileUri)
@@ -145,7 +150,7 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MyViewHo
     // ViewHolder class for chat items
     public static class MyViewHolder extends RecyclerView.ViewHolder {
         LinearLayout leftChatView, rightChatView;
-        LinearLayout leftCaptionContainer;
+        LinearLayout leftCaptionContainer,rightCaptionContainer;
         TextView leftTextView, rightTextView;
         ImageView profileImage, botLogo, leftImageView, rightImageView;
         TextView leftCaptionTextView, rightCaptionTextView;
@@ -159,6 +164,7 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MyViewHo
             profileImage = itemView.findViewById(R.id.profile_image);
             botLogo = itemView.findViewById(R.id.bot_logo);
             leftImageView = itemView.findViewById(R.id.left_image_view); // New
+            rightCaptionContainer = itemView.findViewById(R.id.right_caption_container);
             rightImageView = itemView.findViewById(R.id.right_image_view); // New
             leftCaptionContainer = itemView.findViewById(R.id.left_caption_container); // New
             leftCaptionTextView = itemView.findViewById(R.id.left_caption_text_view); // New

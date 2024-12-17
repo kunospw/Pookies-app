@@ -1,13 +1,20 @@
 package com.example.pookies;
 
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.provider.MediaStore;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -62,7 +69,9 @@ public class ChatFragment extends Fragment {
     private String userProfileUri = null;
     private String userName = "User"; // Default value if name isn't fetched
     private List<String> chatContext = new ArrayList<>();
-
+    private Uri selectedImageUri;
+    private ImageButton attachImageBtn;
+    private ActivityResultLauncher<Intent> imagePickerLauncher;
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -79,6 +88,18 @@ public class ChatFragment extends Fragment {
             // Fetch the profile picture dynamically
             fetchUserProfilePictureAndInitializeAdapter();
         }
+        imagePickerLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() == Activity.RESULT_OK) {
+                        Intent data = result.getData();
+                        if (data != null) {
+                            selectedImageUri = data.getData();
+                            uploadImageAndSend();
+                        }
+                    }
+                }
+        );
     }
 
     @Override
@@ -87,7 +108,8 @@ public class ChatFragment extends Fragment {
         recyclerView = view.findViewById(R.id.recycler_view);
         messageEditText = view.findViewById(R.id.message_edit_text);
         sendButton = view.findViewById(R.id.send_btn);
-
+        attachImageBtn = view.findViewById(R.id.attach_image_btn);
+        attachImageBtn.setOnClickListener(v -> openImagePicker());
 
         // Initialize adapter
         messageAdapter = new MessageAdapter(getContext(), messageList, (view1, message, position) -> {
@@ -110,6 +132,97 @@ public class ChatFragment extends Fragment {
 
         return view;
     }
+    private void openImagePicker() {
+        Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        imagePickerLauncher.launch(intent);
+    }
+
+    private void uploadImageAndSend() {
+        if (selectedImageUri != null) {
+            // Optional: Add a caption dialog
+            AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+            final EditText captionInput = new EditText(getContext());
+            captionInput.setHint("Add a caption (optional)");
+
+            builder.setTitle("Image Caption")
+                    .setView(captionInput)
+                    .setPositiveButton("Send", (dialog, which) -> {
+                        String caption = captionInput.getText().toString().trim();
+
+                        StorageReference storageRef = FirebaseStorage.getInstance().getReference()
+                                .child("chat_images/" + userId + "/" + System.currentTimeMillis() + ".jpg");
+
+                        storageRef.putFile(selectedImageUri)
+                                .addOnSuccessListener(taskSnapshot -> {
+                                    storageRef.getDownloadUrl().addOnSuccessListener(uri -> {
+                                        // Create a message with the image and optional caption
+                                        Message imageMessage = new Message("Sent an image", Message.SENT_BY_ME);
+                                        imageMessage.setImageUrl(uri.toString());
+
+                                        if (!caption.isEmpty()) {
+                                            imageMessage.setCaption(caption);
+                                        }
+
+                                        // Save to messages table
+                                        String messageId = mDatabase.push().getKey();
+                                        if (messageId != null) {
+                                            mDatabase.child(messageId).setValue(imageMessage)
+                                                    .addOnSuccessListener(aVoid -> {
+                                                        saveContextMessage(imageMessage);
+
+                                                        // Call AI to analyze the image with optional caption
+                                                        analyzeImage(uri.toString(), caption);
+                                                    })
+                                                    .addOnFailureListener(e -> {
+                                                        Toast.makeText(getContext(), "Failed to send image: " + e.getMessage(),
+                                                                Toast.LENGTH_SHORT).show();
+                                                    });
+                                        }
+                                    });
+                                })
+                                .addOnFailureListener(e -> {
+                                    Toast.makeText(getContext(), "Image upload failed: " + e.getMessage(),
+                                            Toast.LENGTH_SHORT).show();
+                                });
+                    })
+                    .setNegativeButton("Send without caption", (dialog, which) -> {
+                        // Proceed without a caption
+                        StorageReference storageRef = FirebaseStorage.getInstance().getReference()
+                                .child("chat_images/" + userId + "/" + System.currentTimeMillis() + ".jpg");
+
+                        storageRef.putFile(selectedImageUri)
+                                .addOnSuccessListener(taskSnapshot -> {
+                                    storageRef.getDownloadUrl().addOnSuccessListener(uri -> {
+                                        // Create a message with the image
+                                        Message imageMessage = new Message("Sent an image", Message.SENT_BY_ME);
+                                        imageMessage.setImageUrl(uri.toString());
+
+                                        // Save to messages table
+                                        String messageId = mDatabase.push().getKey();
+                                        if (messageId != null) {
+                                            mDatabase.child(messageId).setValue(imageMessage)
+                                                    .addOnSuccessListener(aVoid -> {
+                                                        saveContextMessage(imageMessage);
+
+                                                        // Call AI to analyze the image without a caption
+                                                        analyzeImage(uri.toString(), null);
+                                                    })
+                                                    .addOnFailureListener(e -> {
+                                                        Toast.makeText(getContext(), "Failed to send image: " + e.getMessage(),
+                                                                Toast.LENGTH_SHORT).show();
+                                                    });
+                                        }
+                                    });
+                                })
+                                .addOnFailureListener(e -> {
+                                    Toast.makeText(getContext(), "Image upload failed: " + e.getMessage(),
+                                            Toast.LENGTH_SHORT).show();
+                                });
+                    })
+                    .show();
+        }
+    }
+
     private void fetchUserName() {
         DatabaseReference userNameRef = FirebaseDatabase.getInstance().getReference("users").child(userId).child("info").child("name");
 
@@ -462,7 +575,7 @@ public class ChatFragment extends Fragment {
                                 RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
                                 Request request = new Request.Builder()
                                         .url("https://api.openai.com/v1/chat/completions")
-                                        .header("Authorization", "Bearer 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")
+                                        .header("Authorization", "Bearer HEre")
                                         .post(body)
                                         .build();
 
@@ -567,7 +680,7 @@ public class ChatFragment extends Fragment {
             RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
             Request request = new Request.Builder()
                     .url("https://api.openai.com/v1/images/generations")
-                    .header("Authorization", "Bearer  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")
+                    .header("Authorization", "Bearer Here")
                     .post(body)
                     .build();
 
@@ -630,5 +743,94 @@ public class ChatFragment extends Fragment {
             addResponse("Error preparing image generation request: " + e.getMessage());
         }
     }
+    private void analyzeImage(String imageUrl, String caption) {
+        try {
+            JSONObject jsonBody = new JSONObject();
+            JSONArray messagesArray = new JSONArray();
 
+            // System message with context
+            messagesArray.put(new JSONObject()
+                    .put("role", "system")
+                    .put("content", "You are a friendly AI assistant named Pookies. " +
+                            "Describe the image in detail and engage in a conversation about what you see. " +
+                            "Consider the user's caption when analyzing the image. " +
+                            "Be creative, descriptive, and keep the tone friendly and casual."));
+
+            // Add current chat context
+            for (String contextMessage : chatContext) {
+                messagesArray.put(new JSONObject()
+                        .put("role", "assistant")
+                        .put("content", contextMessage));
+            }
+
+            // Image analysis message with optional caption
+            String analysisPrompt = "[IMAGE]" + imageUrl;
+            if (caption != null && !caption.isEmpty()) {
+                analysisPrompt += " Caption: " + caption;
+            }
+
+            messagesArray.put(new JSONObject()
+                    .put("role", "user")
+                    .put("content", analysisPrompt));
+
+            // Prepare the full JSON body
+            jsonBody.put("model", "gpt-4-vision-preview");
+            jsonBody.put("messages", messagesArray);
+            jsonBody.put("max_tokens", 4000);
+
+            // Prepare and send the API request
+            RequestBody body = RequestBody.create(jsonBody.toString(), JSON);
+            Request request = new Request.Builder()
+                    .url("https://api.openai.com/v1/chat/completions")
+                    .header("Authorization", "Bearer HEre")
+                    .post(body)
+                    .build();
+
+            client.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            try {
+                                if (response.isSuccessful()) {
+                                    String responseBody = response.body().string();
+                                    JSONObject jsonObject = new JSONObject(responseBody);
+                                    JSONArray choicesArray = jsonObject.getJSONArray("choices");
+
+                                    if (choicesArray.length() > 0) {
+                                        String imageAnalysis = choicesArray.getJSONObject(0)
+                                                .getJSONObject("message")
+                                                .getString("content");
+
+                                        addResponse(imageAnalysis);
+                                    }
+                                } else {
+                                    Log.e("API_RESPONSE", "Response code: " + response.code());
+                                    Log.e("API_RESPONSE", "Response body: " + response.body().string());
+                                    addResponse("Sorry, I couldn't analyze the image right now.");
+                                }
+                            } catch (Exception e) {
+                                Log.e("API_PROCESSING", "Error parsing response", e);
+                                addResponse("Error processing image: " + e.getMessage());
+                            }
+                        });
+                    }
+                }
+
+                @Override
+                public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            Log.e("API_CALL", "Network failure", e);
+                            addResponse("Failed to analyze image: " + e.getMessage());
+                        });
+                    }
+                }
+            });
+
+        } catch (JSONException e) {
+            Log.e("ChatFragment", "Error creating JSON for image analysis", e);
+            addResponse("Error preparing image analysis request: " + e.getMessage());
+        }
+    }
 }
